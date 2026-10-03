@@ -1,0 +1,45 @@
+{
+  "subscriptions": [
+    {
+      "name": "Provider_1",
+      "url": "https://example.com/sub/your_token_here",
+      "headers": {
+        "User-Agent": "Clash-verge/1.7.7",
+        "x-hwid": "your_custom_hwid_if_needed",
+        "x-device-os": "Windows",
+        "x-ver-os": "11",
+        "x-device-model": "PC"
+      },
+      "use_cookies": false
+    },
+    {
+      "name": "Provider_2",
+      "url": "https://example.com/another_sub_token",
+      "headers": {
+        "User-Agent": "Hiddify/2.0.5",
+        "x-hwid": "your_custom_hwid_if_needed"
+      },
+      "use_cookies": false
+    },
+    {
+      "name": "Provider_3",
+      "url": "https://example.com/cookie_protected_sub",
+      "headers": {
+        "User-Agent": "Hiddify/2.0.5"
+      },
+      "use_cookies": true
+    }
+  ],
+  "options": {
+    "mixed_port": 7890,
+    "socks_port": 7891,
+    "redir_port": 7892,
+    "allow_lan": true,
+    "mode": "rule",
+    "log_level": "info",
+    "output_files": [
+      "./3-in-1_VPN.yaml",
+      "~/Desktop/3-in-1_VPN.yaml"
+    ]
+  }
+}
