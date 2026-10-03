@@ -113,4 +113,4 @@ cp config.example.json config.json
 ---
 
 ## 📄 Лицензия
-MIT License.
+Проект распространяется под лицензией **GNU General Public License v3.0 (GPLv3)**. Подробности см. в файле [LICENSE](LICENSE).
