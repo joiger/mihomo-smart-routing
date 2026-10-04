@@ -830,7 +830,7 @@ def ai_priority(name):
 DEFAULT_CATEGORIES = [
     {
         "name": "🎯 Games",
-        "default_options": ["DIRECT", "Auto-Fallback", "Auto-UrlTest"],
+        "default_options": ["DIRECT", "Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest"],
         "rules": [
             "GEOSITE,steam",
             "GEOSITE,epicgames",
@@ -850,7 +850,7 @@ DEFAULT_CATEGORIES = [
     },
     {
         "name": "✈️ Telegram",
-        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "default_options": ["Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest", "DIRECT"],
         "rules": [
             "GEOSITE,telegram",
             "DOMAIN-SUFFIX,t.me",
@@ -871,7 +871,7 @@ DEFAULT_CATEGORIES = [
     },
     {
         "name": "💬 Discord",
-        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "default_options": ["Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest", "DIRECT"],
         "rules": [
             "GEOSITE,discord",
             "DOMAIN-SUFFIX,discord.com",
@@ -883,7 +883,7 @@ DEFAULT_CATEGORIES = [
     },
     {
         "name": "🎬 Media-Streaming",
-        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "default_options": ["Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest", "DIRECT"],
         "rules": [
             "DOMAIN-SUFFIX,googlevideo.com",
             "DOMAIN-SUFFIX,youtube.com",
@@ -896,7 +896,7 @@ DEFAULT_CATEGORIES = [
     {
         "name": "🤖 AI-Services",
         "priority": "ai",
-        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "default_options": ["Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest", "DIRECT"],
         "rules": [
             "DOMAIN-SUFFIX,gemini.google.com",
             "DOMAIN-SUFFIX,generativelanguage.googleapis.com",
