@@ -938,6 +938,19 @@ def build_mihomo_config(unique_proxies, user_options=None):
 
     opts = user_options or {}
 
+    # Adaptive Telemetry Prioritization (Wi-Fi vs Cellular & Geo-block penalization)
+    try:
+        from telemetry_db import get_prioritized_proxies, detect_current_network_type, recalculate_scores, DEFAULT_DB_PATH
+        if os.path.exists(DEFAULT_DB_PATH):
+            recalculate_scores(DEFAULT_DB_PATH)
+            current_net = opts.get("network_type") or detect_current_network_type()
+            fallback_proxies = get_prioritized_proxies(fallback_proxies, network_type=current_net, category="general", db_path=DEFAULT_DB_PATH)
+            mobile_proxies = get_prioritized_proxies(mobile_proxies, network_type="cellular", category="general", db_path=DEFAULT_DB_PATH)
+            ai_proxies = get_prioritized_proxies(ai_proxies, network_type=current_net, category="ai", db_path=DEFAULT_DB_PATH)
+    except Exception:
+        # Graceful fallback to static priority tiers
+        pass
+
     # Category Constructor: custom user categories or defaults
     categories = opts.get("categories") or DEFAULT_CATEGORIES
     category_names = [cat["name"] for cat in categories]
