@@ -57,8 +57,16 @@ jobs:
           if gist_id:
               print(f"::add-mask::{gist_id}", flush=True)
 
+          if not os.path.exists("output/config.yaml"):
+              print("[ERROR] Generated config file 'output/config.yaml' not found. Aborting deployment.")
+              sys.exit(1)
+
           with open("output/config.yaml", "r", encoding="utf-8") as f:
               content = f.read()
+
+          if not content.strip():
+              print("[ERROR] Generated config file is empty. Aborting deployment to prevent overwriting working Gist.")
+              sys.exit(1)
 
           headers = {
               "Authorization": f"token {token}",

@@ -5,7 +5,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_PATH="$SCRIPT_DIR/sync.py"
-CRON_JOB="0 * * * * $(which python3 || echo python3) \"$SCRIPT_PATH\" >/dev/null 2>&1"
+CRON_JOB="0 * * * * cd \"$SCRIPT_DIR\" && $(which python3 || echo python3) \"$SCRIPT_PATH\" >/dev/null 2>&1"
 
 (crontab -l 2>/dev/null | grep -Fv "$SCRIPT_PATH" ; echo "$CRON_JOB") | crontab -
 

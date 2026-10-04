@@ -18,7 +18,7 @@ FORBIDDEN_PATTERNS = [
     (re.compile(r"ghp_[a-zA-Z0-9]{30,}", re.IGNORECASE), "GitHub Personal Access Token (classic)"),
     (re.compile(r"github_pat_[a-zA-Z0-9_]{30,}", re.IGNORECASE), "GitHub Fine-Grained Personal Access Token"),
     (re.compile(r"-----BEGIN (?:RSA|OPENSSH|EC|DSA|PRIVATE)? ?KEY-----"), "Private cryptographic key"),
-    (re.compile(r"vless://[a-zA-Z0-9_-]{8,}@", re.IGNORECASE), "Live VLESS credential with userinfo"),
+    (re.compile(r"(?:vless|trojan|hysteria2|hy2)://[a-zA-Z0-9_.-]{6,}@", re.IGNORECASE), "Live proxy credential with userinfo"),
 ]
 
 # Patterns allowed in documentation as examples/placeholders

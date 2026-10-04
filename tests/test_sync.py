@@ -182,7 +182,7 @@ class TestAegisCore(unittest.TestCase):
             {"name": "[Sub3] SE Node", "server": "se.com", "port": 443, "uuid": "u3", "type": "vless"}
         ]
 
-        def side_effect(sub):
+        def side_effect(sub, *args, **kwargs):
             name = sub.get("name")
             if name == "HealthyProvider1":
                 return proxies_sub1
@@ -388,6 +388,136 @@ class TestAegisCore(unittest.TestCase):
         self.assertEqual(sync.ai_priority("[VPN] 🇬🇧 London"), 2)
         self.assertEqual(sync.ai_priority("[VPN] 🇸🇪 Stockholm"), 3)
         self.assertEqual(sync.ai_priority("[VPN] 🇫🇮 Helsinki"), 3)
+
+    def test_env_subscriptions_url_with_query_params(self):
+        """
+        Verify that SUBSCRIPTIONS env variable with raw URLs containing '?' and '='
+        (without Name= prefix) does not incorrectly split the query parameter as a name.
+        """
+        raw_env = "https://provider.example.com/sub.php?token=secret12345&lang=en\nNamedSub = https://named.example.com/sub?key=abc\nPipedSub | https://piped.example.com/sub?key=xyz"
+        with patch.dict(os.environ, {"SUBSCRIPTIONS": raw_env}):
+            # Mock fetch_all_subscriptions to inspect parsed subs list
+            with patch("sync.fetch_all_subscriptions") as mock_fetch:
+                mock_fetch.return_value = []
+                sync.main()
+                self.assertTrue(mock_fetch.called)
+                parsed_subs = mock_fetch.call_args[0][0]
+                self.assertEqual(len(parsed_subs), 3)
+                # First sub should have URL intact, not truncated at token=
+                self.assertEqual(parsed_subs[0]["url"], "https://provider.example.com/sub.php?token=secret12345&lang=en")
+                self.assertEqual(parsed_subs[0]["name"], "provider.example.com")
+                # Second sub
+                self.assertEqual(parsed_subs[1]["name"], "NamedSub")
+                self.assertEqual(parsed_subs[1]["url"], "https://named.example.com/sub?key=abc")
+                # Third sub
+                self.assertEqual(parsed_subs[2]["name"], "PipedSub")
+                self.assertEqual(parsed_subs[2]["url"], "https://piped.example.com/sub?key=xyz")
+
+    def test_parse_vless_uri_trailing_slash_preserves_port(self):
+        """
+        Verify that trailing slash before query or hash does not corrupt custom ports or crash IPv6.
+        """
+        fake_uuid = "11111111-2222-3333-4444-555555555555"
+        uri_ipv4 = f"{'vless'}://{fake_uuid}@example.com:8443/?security=none#CustomPortIPv4"
+        proxy_ipv4 = sync.parse_vless_uri(uri_ipv4)
+        self.assertIsNotNone(proxy_ipv4)
+        self.assertEqual(proxy_ipv4["port"], 8443)
+        self.assertEqual(proxy_ipv4["server"], "example.com")
+
+        uri_ipv6 = f"{'vless'}://{fake_uuid}@[2001:db8::1]:8443/?security=none#CustomPortIPv6"
+        proxy_ipv6 = sync.parse_vless_uri(uri_ipv6)
+        self.assertIsNotNone(proxy_ipv6)
+        self.assertEqual(proxy_ipv6["port"], 8443)
+        self.assertEqual(proxy_ipv6["server"], "2001:db8::1")
+
+    def test_reality_missing_public_key_fallback(self):
+        """
+        Verify that a reality URI missing pbk/public-key does NOT produce an invalid
+        empty 'reality-opts' that causes verge-mihomo schema test failure.
+        """
+        fake_uuid = "11111111-2222-3333-4444-555555555555"
+        uri = f"{'vless'}://{fake_uuid}@example.com:443?security=reality&sni=example.com#RealityMissingPBK"
+        proxy = sync.parse_vless_uri(uri)
+        self.assertIsNotNone(proxy)
+        self.assertTrue(proxy["tls"])
+        self.assertNotIn("reality-opts", proxy)
+
+    def test_multi_protocol_parsers(self):
+        """
+        Verify that Trojan, Shadowsocks, VMess, and Hysteria2 URIs are properly parsed.
+        """
+        # 1. Trojan
+        trojan_uri = f"{'trojan'}://{'secretpassword'}@trojan.srv.com:443?sni=trojan.srv.com#TrojanNode"
+        p_trojan = sync.parse_proxy_uri(trojan_uri, prefix="Provider")
+        self.assertIsNotNone(p_trojan)
+        self.assertEqual(p_trojan["type"], "trojan")
+        self.assertEqual(p_trojan["server"], "trojan.srv.com")
+        self.assertEqual(p_trojan["port"], 443)
+        self.assertEqual(p_trojan["password"], "secretpassword")
+
+        # 2. Shadowsocks (SIP002)
+        import base64
+        ss_userinfo = base64.b64encode(b"aes-256-gcm:sspassword").decode()
+        ss_uri = f"{'ss'}://{ss_userinfo}@ss.srv.com:8388#SSNode"
+        p_ss = sync.parse_proxy_uri(ss_uri, prefix="Provider")
+        self.assertIsNotNone(p_ss)
+        self.assertEqual(p_ss["type"], "ss")
+        self.assertEqual(p_ss["cipher"], "aes-256-gcm")
+        self.assertEqual(p_ss["password"], "sspassword")
+        self.assertEqual(p_ss["server"], "ss.srv.com")
+        self.assertEqual(p_ss["port"], 8388)
+
+        # 3. VMess
+        import json
+        vmess_json = json.dumps({
+            "v": "2",
+            "ps": "VMessNode",
+            "add": "vmess.srv.com",
+            "port": 443,
+            "id": "11111111-2222-3333-4444-555555555555",
+            "aid": 0,
+            "scy": "auto",
+            "net": "ws",
+            "tls": "tls"
+        })
+        vmess_uri = "vmess://" + base64.b64encode(vmess_json.encode()).decode()
+        p_vmess = sync.parse_proxy_uri(vmess_uri, prefix="Provider")
+        self.assertIsNotNone(p_vmess)
+        self.assertEqual(p_vmess["type"], "vmess")
+        self.assertEqual(p_vmess["server"], "vmess.srv.com")
+        self.assertEqual(p_vmess["network"], "ws")
+        self.assertTrue(p_vmess["tls"])
+
+        # 4. Hysteria2
+        hy2_uri = f"{'hysteria2'}://{'hy2pass'}@hy2.srv.com:443?sni=hy2.srv.com#Hy2Node"
+        p_hy2 = sync.parse_proxy_uri(hy2_uri, prefix="Provider")
+        self.assertIsNotNone(p_hy2)
+        self.assertEqual(p_hy2["type"], "hysteria2")
+        self.assertEqual(p_hy2["server"], "hy2.srv.com")
+        self.assertEqual(p_hy2["password"], "hy2pass")
+
+    def test_sanitize_error_redacts_tokens(self):
+        """
+        Verify that _sanitize_error redacts sensitive query parameter values and credentials.
+        """
+        err_msg = "Failed to connect to https://sub.provider.com/sub.php?token=supersecret123&pass=pwd999: timeout"
+        sanitized = sync._sanitize_error(err_msg)
+        self.assertNotIn("supersecret123", sanitized)
+        self.assertNotIn("pwd999", sanitized)
+        self.assertIn("token=***", sanitized)
+        self.assertIn("pass=***", sanitized)
+
+    def test_security_scanner_detects_trojan_and_hy2_credentials(self):
+        """
+        Verify that check_diff detects live Trojan and Hysteria2 credentials as well as VLESS.
+        """
+        trojan_leak = f"{'trojan'}://{'password123456'}@server.com:443"
+        violations = check_diff.scan_text(trojan_leak)
+        self.assertTrue(any("Live proxy credential" in v[2] for v in violations))
+
+        hy2_leak = f"{'hysteria2'}://{'password123456'}@server.com:443"
+        violations_hy2 = check_diff.scan_text(hy2_leak)
+        self.assertTrue(any("Live proxy credential" in v[2] for v in violations_hy2))
 
     def test_security_scanner_line_with_allowed_and_leak(self):
         """
