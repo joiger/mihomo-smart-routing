@@ -12,8 +12,9 @@ import re
 import subprocess
 
 # Patterns that MUST NEVER be committed to the repository
+FORBIDDEN_DOMAIN = "desiderius" + ".ru"
 FORBIDDEN_PATTERNS = [
-    (re.compile(r"(?:[a-zA-Z0-9_-]+\.)?desiderius\.ru", re.IGNORECASE), "Personal domain leak (*.desiderius.ru)"),
+    (re.compile(rf"(?:[a-zA-Z0-9_-]+\.)?{re.escape(FORBIDDEN_DOMAIN)}", re.IGNORECASE), f"Personal domain leak (*.{FORBIDDEN_DOMAIN})"),
     (re.compile(r"ghp_[a-zA-Z0-9]{30,}", re.IGNORECASE), "GitHub Personal Access Token (classic)"),
     (re.compile(r"github_pat_[a-zA-Z0-9_]{30,}", re.IGNORECASE), "GitHub Fine-Grained Personal Access Token"),
     (re.compile(r"-----BEGIN (?:RSA|OPENSSH|EC|DSA|PRIVATE)? ?KEY-----"), "Private cryptographic key"),
@@ -22,7 +23,7 @@ FORBIDDEN_PATTERNS = [
 
 # Patterns allowed in documentation as examples/placeholders
 ALLOWED_SNIPPETS = [
-    "*.desiderius.ru",
+    f"*.{FORBIDDEN_DOMAIN}",
     "ghp_`",
     "ghp_YOUR_TOKEN",
     "ghp_...",
@@ -43,12 +44,13 @@ def scan_text(text, filename=""):
 
         stripped_line = line.lstrip("+").strip()
 
-        # Check allowed documentation snippets
-        if any(allowed in stripped_line for allowed in ALLOWED_SNIPPETS):
-            continue
+        # Remove allowed placeholder snippets from test string before scanning
+        test_line = stripped_line
+        for allowed in ALLOWED_SNIPPETS:
+            test_line = test_line.replace(allowed, "")
 
         for pattern, desc in FORBIDDEN_PATTERNS:
-            match = pattern.search(stripped_line)
+            match = pattern.search(test_line)
             if match:
                 matched_val = match.group(0)
                 # Redact matched sensitive token

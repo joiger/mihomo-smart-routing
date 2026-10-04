@@ -14,6 +14,7 @@ import urllib.parse
 import concurrent.futures
 import requests
 import yaml
+import re
 
 class NoAliasDumper(yaml.SafeDumper):
     def ignore_aliases(self, data):
@@ -37,6 +38,11 @@ def _mask_proxies_in_ci(proxies):
             pwd = p.get("password")
             if pwd:
                 _mask_token_in_ci(pwd)
+            ropts = p.get("reality-opts")
+            if isinstance(ropts, dict):
+                pbk = ropts.get("public-key")
+                if pbk:
+                    _mask_token_in_ci(pbk)
 
 def parse_vless_uri(uri, prefix=""):
     if not uri.startswith("vless://"):
@@ -52,8 +58,11 @@ def parse_vless_uri(uri, prefix=""):
         if prefix:
             name = f"[{prefix}] {name}"
             
+        if "@" not in rest:
+            return None
+            
         user_info, host_port_query = rest.split("@", 1)
-        uuid = user_info
+        uuid = urllib.parse.unquote(user_info).strip()
         if "?" in host_port_query:
             host_port, query = host_port_query.split("?", 1)
             params = dict(urllib.parse.parse_qsl(query))
@@ -61,9 +70,25 @@ def parse_vless_uri(uri, prefix=""):
             host_port = host_port_query
             params = {}
         
-        if ":" in host_port:
-            host, port = host_port.split(":", 1)
-            port = int(port)
+        # Robust host & port parsing: IPv6 brackets [2001:db8::1]:443, raw IPv6, or host:port
+        if host_port.startswith("["):
+            closing_idx = host_port.find("]")
+            if closing_idx != -1:
+                host = host_port[1:closing_idx]
+                rem = host_port[closing_idx+1:]
+                port = int(rem[1:]) if rem.startswith(":") else 443
+            else:
+                host = host_port.strip("[]")
+                port = 443
+        elif host_port.count(":") > 1:
+            host = host_port
+            port = 443
+        elif ":" in host_port:
+            host, port_str = host_port.rsplit(":", 1)
+            try:
+                port = int(port_str)
+            except ValueError:
+                port = 443
         else:
             host = host_port
             port = 443
@@ -94,6 +119,9 @@ def parse_vless_uri(uri, prefix=""):
                 if "short-id" in params: ropts["short-id"] = params["short-id"]
                 if "spx" in params: ropts["spider-x"] = params["spx"]
                 proxy["reality-opts"] = ropts
+
+        if params.get("allowInsecure") == "1" or params.get("insecure") == "1":
+            proxy["skip-cert-verify"] = True
         
         flow = params.get("flow")
         if flow:
@@ -123,7 +151,20 @@ def parse_vless_uri(uri, prefix=""):
         print(f"Error parsing URI: {e}")
         return None
 
-def fetch_subscription(sub_config):
+def safe_b64decode(data):
+    """
+    Safely decodes base64 data, handling missing padding, URL-safe characters, and whitespace.
+    """
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    data = data.strip().replace(b"\r", b"").replace(b"\n", b"")
+    data = data.replace(b"-", b"+").replace(b"_", b"/")
+    missing_padding = len(data) % 4
+    if missing_padding:
+        data += b"=" * (4 - missing_padding)
+    return base64.b64decode(data)
+
+def fetch_subscription(sub_config, timeout=10):
     name = sub_config.get("name", "VPN")
     url = sub_config.get("url", "")
     headers = dict(sub_config.get("headers", {}))
@@ -136,8 +177,12 @@ def fetch_subscription(sub_config):
     _mask_token_in_ci(url)
     print(f"[*] Fetching '{name}'...")
 
-    if "User-Agent" not in headers:
-        headers["User-Agent"] = "Clash-verge/1.7.7"
+    # Normalize User-Agent header
+    ua_keys = [k for k in list(headers.keys()) if k.lower() == "user-agent"]
+    current_ua = headers[ua_keys[0]] if ua_keys else "Clash-verge/1.7.7"
+    for k in ua_keys:
+        del headers[k]
+    headers["User-Agent"] = current_ua
 
     session = requests.Session()
     cookie_file = f"{name}_cookies.txt"
@@ -156,7 +201,7 @@ def fetch_subscription(sub_config):
         resp = session.get(
             url,
             headers=headers,
-            timeout=15,
+            timeout=timeout,
             verify=True,
             allow_redirects=True
         )
@@ -169,7 +214,7 @@ def fetch_subscription(sub_config):
         resp = session.get(
             url,
             headers=headers,
-            timeout=15,
+            timeout=timeout,
             verify=True,
             allow_redirects=True
         )
@@ -183,7 +228,16 @@ def fetch_subscription(sub_config):
 
     raw = resp.content.strip()
 
-    # Try YAML first (if subscription returns clash config directly)
+    if not raw:
+        print(f"  [!] Warning: Provider '{name}' returned an empty response body.")
+        return []
+
+    # Check for HTML / anti-bot challenge
+    is_html = b"<html" in raw.lower() or b"<!doctype html" in raw.lower()
+    if is_html:
+        print(f"  [!] Provider '{name}' returned an HTML page (possible Cloudflare / anti-bot challenge).")
+
+    # 1. Try YAML first (if subscription returns clash config directly)
     try:
         data = yaml.safe_load(raw.decode("utf-8", errors="ignore"))
         if isinstance(data, dict) and data.get("proxies"):
@@ -196,11 +250,17 @@ def fetch_subscription(sub_config):
     except Exception:
         pass
 
-    # Try Base64 of VLESS/VMess URIs
-    try:
-        decoded = base64.b64decode(raw).decode("utf-8", errors="ignore")
-    except Exception:
-        decoded = raw.decode("utf-8", errors="ignore")
+    # 2. Check if already plain text containing vless:// lines
+    raw_str = raw.decode("utf-8", errors="ignore")
+    decoded = ""
+    if "vless://" in raw_str:
+        decoded = raw_str
+    else:
+        # 3. Try Base64 of VLESS/VMess URIs (with safe unpadded / urlsafe decoder)
+        try:
+            decoded = safe_b64decode(raw).decode("utf-8", errors="ignore")
+        except Exception:
+            decoded = raw_str
 
     proxies = []
     for line in decoded.splitlines():
@@ -210,12 +270,12 @@ def fetch_subscription(sub_config):
             if p:
                 proxies.append(p)
 
-    if not proxies and headers.get("User-Agent") != "Hiddify/2.0.5":
+    if not proxies and headers.get("User-Agent") != "Hiddify/2.0.5" and not is_html:
         print(f"  [i] 0 proxies found with default UA. Retrying '{name}' with Hiddify UA...")
         sub_retry = dict(sub_config)
         sub_retry["headers"] = dict(headers)
         sub_retry["headers"]["User-Agent"] = "Hiddify/2.0.5"
-        return fetch_subscription(sub_retry)
+        return fetch_subscription(sub_retry, timeout=timeout)
 
     print(f"  -> Got {len(proxies)} proxies (URIs) from '{name}'")
     _mask_proxies_in_ci(proxies)
@@ -225,15 +285,18 @@ def fetch_all_subscriptions(subs, timeout=15):
     """
     Fetches subscriptions concurrently using ThreadPoolExecutor within a total timeout.
     Provides zero-downtime resilience: single provider failures do not abort execution.
+    Non-blocking timeout: guarantees executor does not hang if individual providers stall.
     """
     if not subs:
         return []
 
     all_proxies = []
     max_workers = min(len(subs), 10)
+    worker_timeout = min(10, timeout)
     print(f"[*] Concurrently fetching {len(subs)} subscription(s) (workers: {max_workers}, timeout: {timeout}s)...")
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+    try:
         future_to_sub = {executor.submit(fetch_subscription, sub): sub for sub in subs}
         done, not_done = concurrent.futures.wait(future_to_sub.keys(), timeout=timeout)
 
@@ -254,15 +317,20 @@ def fetch_all_subscriptions(subs, timeout=15):
                     print(f"  [!] Warning: Provider '{sub_name}' returned 0 proxies.")
             except Exception as e:
                 print(f"  [!] Warning: Provider '{sub_name}' failed to fetch ({type(e).__name__}: {e}). Continuing with remaining providers.")
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
 
     return all_proxies
 
+def is_relay_or_bypass(n):
+    return any(k in n for k in ["→", "->", "обход", "bypass", "relay"])
+
 def is_junk_or_auto(p):
     name = p.get("name", "").lower()
-    server = str(p.get("server", "")).lower()
+    server = str(p.get("server", "")).strip().lower()
     
-    # 1. Fake servers
-    if server in ["127.0.0.1", "0.0.0.0", "localhost"]:
+    # 1. Fake or empty servers
+    if not server or server in ["127.0.0.1", "0.0.0.0", "localhost"]:
         return True
         
     # 2. Auto-select pseudo nodes
@@ -283,8 +351,8 @@ def is_junk_or_auto(p):
         return True
         
     # 4. Pure Russian nodes (waste ping / blocked destinations)
-    # Exclude relay chains that exit outside RU (e.g. 'москва → германия')
-    is_relay = "→" in name or "->" in name
+    # Exclude relay chains & DPI bypass nodes (e.g. 'москва → германия', '🇷🇺 Обход')
+    is_relay = is_relay_or_bypass(name)
     if not is_relay:
         if "🇷🇺" in p.get("name", ""):
             return True
@@ -299,7 +367,7 @@ def get_proxy_fingerprint(p):
     """
     Generates a unique fingerprint tuple (server, port, uuid) for proxy deduplication.
     """
-    server = str(p.get("server", "")).strip().lower()
+    server = str(p.get("server", "")).strip().lower().strip("[]")
     port = str(p.get("port", "")).strip()
     uuid = str(p.get("uuid", "") or p.get("password", "")).strip().lower()
     if server and port and uuid:
@@ -333,7 +401,7 @@ def deduplicate_proxies(proxies):
     seen_names = set()
     unique_proxies = []
     for p in deduped:
-        name = p["name"]
+        name = p.get("name", "Unnamed")
         counter = 1
         orig_name = name
         while name in seen_names:
@@ -345,8 +413,7 @@ def deduplicate_proxies(proxies):
 
     return unique_proxies
 
-def is_relay_or_bypass(n):
-    return any(k in n for k in ["→", "->", "обход", "bypass", "relay"])
+TIER1_REGEX = re.compile(r"(?:^|[\s\[\]\-_(])(fi|se)(?:[\s\[\]\-_)]|$)", re.IGNORECASE)
 
 def fallback_priority(name):
     """
@@ -362,8 +429,12 @@ def fallback_priority(name):
     is_relay = is_relay_or_bypass(n)
 
     # Tier 1: Finland & Sweden direct (lowest physical latency ~30–45 ms)
-    if not is_relay and any(k in n for k in ["🇫🇮", "финлянди", "finland", "🇸🇪", "швеци", "sweden"]):
-        return 1
+    if not is_relay:
+        if any(k in n for k in [
+            "🇫🇮", "финлянди", "finland", "helsinki", "хельсинки", "espoo", "эспоо", "tampere", "тампере",
+            "🇸🇪", "швеци", "sweden", "stockholm", "стокгольм", "malmo", "мальмё", "malmö", "gothenburg", "гётеборг"
+        ]) or bool(TIER1_REGEX.search(name)):
+            return 1
 
     # Tier 2: Transit bridges & DPI bypasses (Instant failover for Mobile LTE under TSPU / white-lists)
     if is_relay:
@@ -371,7 +442,7 @@ def fallback_priority(name):
 
     # Tier 3: Core Near-EU (Germany, Netherlands, Estonia, Poland, Latvia, Lithuania)
     if any(k in n for k in [
-        "🇩🇪", "германи", "germany", "frankfurt", "франкфурт",
+        "🇩🇪", "германи", "germany", "frankfurt", "франкфурт", "berlin", "берлин",
         "🇳🇱", "нидерланд", "netherlands", "holland", "амстердам", "amsterdam",
         "🇪🇪", "эстони", "estonia", "таллин", "tallinn",
         "🇵🇱", "польш", "poland", "варшав", "warsaw",
@@ -395,7 +466,11 @@ def fallback_priority(name):
         return 4
 
     # Tier 5: USA / Americas
-    if any(k in n for k in ["🇺🇸", "сша", "usa", "united states", "america"]):
+    if any(k in n for k in [
+        "🇺🇸", "сша", "usa", "united states", "america",
+        "new york", "нью-йорк", "los angeles", "лос-анджелес", "chicago", "чикаго",
+        "miami", "майами", "seattle", "сиэтл", "dallas", "даллас", "california", "калифорния", "ashburn", "эшберн"
+    ]):
         return 5
 
     return 6
@@ -405,13 +480,23 @@ def ai_priority(name):
     Priority sorting for AI Services (US, DE, NL, UK, SE, FI).
     """
     n = name.lower()
-    if any(c in n for c in ["сша", "usa", "united states", "america"]):
+    if any(c in n for c in [
+        "🇺🇸", "сша", "usa", "united states", "america",
+        "new york", "нью-йорк", "los angeles", "лос-анджелес", "chicago", "чикаго", "miami", "майами", "seattle", "сиэтл"
+    ]):
         return 1
-    if any(c in n for c in ["германия", "germany", "нидерланды", "netherlands", "великобритания", "united kingdom", "uk"]):
+    if any(c in n for c in [
+        "🇩🇪", "германия", "германи", "germany", "frankfurt", "франкфурт",
+        "🇳🇱", "нидерланды", "нидерланд", "netherlands", "amsterdam", "амстердам",
+        "🇬🇧", "великобритания", "великобритан", "united kingdom", "uk", "london", "лондон"
+    ]):
         return 2
-    if any(c in n for c in ["швеция", "финляндия", "sweden", "finland"]):
+    if any(c in n for c in [
+        "🇸🇪", "швеция", "швеци", "sweden", "stockholm", "стокгольм",
+        "🇫🇮", "финляндия", "финлянди", "finland", "helsinki", "хельсинки"
+    ]):
         return 3
-    if any(c in n for c in ["moscow", "🇷🇺", "россия", "russia"]):
+    if any(c in n for c in ["moscow", "🇷🇺", "россия", "russia"]) and not is_relay_or_bypass(n):
         return 99
     return 10
 
@@ -795,6 +880,11 @@ def main():
         print("[!] No subscriptions defined. Aborting.")
         return 1
 
+    # Mask all subscription URLs in CI
+    for s in subs:
+        if isinstance(s, dict) and s.get("url"):
+            _mask_token_in_ci(s["url"])
+
     # High-Performance Parallel Fetch across providers with 15-second total timeout
     all_proxies = fetch_all_subscriptions(subs, timeout=15)
             
@@ -812,6 +902,10 @@ def main():
             clean_proxies.append(p)
             
     print(f"[*] Filtered out {dropped_count} junk/auto/RU nodes. Remaining active: {len(clean_proxies)}")
+    
+    if not clean_proxies:
+        print("[ERROR] No valid proxies remaining after filtering out junk/auto/RU nodes. Aborting.")
+        return 1
         
     # Deduplicate proxies by (server, port, uuid) fingerprint and ensure unique names
     unique_proxies = deduplicate_proxies(clean_proxies)
@@ -824,7 +918,7 @@ def main():
     if env_out:
         out_files = [env_out]
     else:
-        out_files = opts.get("output_files", ["./3-in-1_VPN.yaml"])
+        out_files = opts.get("output_files", ["./Aegis.yaml", "./3-in-1_VPN.yaml"])
         
     for out in out_files:
         expanded = os.path.expanduser(os.path.expandvars(out))

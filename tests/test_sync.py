@@ -313,5 +313,91 @@ class TestAegisCore(unittest.TestCase):
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
+    def test_parse_vless_uri_ipv6(self):
+        """
+        Verify robust parsing of IPv6 hosts in square brackets.
+        """
+        fake_uuid = "11111111-2222-3333-4444-555555555555"
+        uri = f"vless://{fake_uuid}@[2001:db8::1]:8443?security=none#IPv6Node"
+        proxy = sync.parse_vless_uri(uri)
+        self.assertIsNotNone(proxy)
+        self.assertEqual(proxy["server"], "2001:db8::1")
+        self.assertEqual(proxy["port"], 8443)
+        self.assertEqual(proxy["uuid"], fake_uuid)
+
+    def test_safe_b64decode_unpadded_and_urlsafe(self):
+        """
+        Verify that safe_b64decode correctly handles unpadded and URL-safe base64 payloads.
+        """
+        import base64
+        original = f"{'vless'}://{'test-uuid'}@{'srv.com:443'}#TestNode"
+        unpadded = base64.urlsafe_b64encode(original.encode()).decode().rstrip("=")
+        decoded = sync.safe_b64decode(unpadded).decode("utf-8")
+        self.assertEqual(decoded, original)
+
+    @patch("sync.requests.Session")
+    def test_cloudflare_html_and_empty_body_handling(self, mock_session_class):
+        """
+        Verify graceful handling when a provider returns an HTML anti-bot challenge or empty body.
+        """
+        mock_session = MagicMock()
+        mock_session_class.return_value = mock_session
+        
+        # 1. HTML challenge response
+        mock_resp_html = MagicMock()
+        mock_resp_html.content = b"<!DOCTYPE html><html><head><title>Just a moment...</title></head><body>cf-turnstile</body></html>"
+        mock_session.get.return_value = mock_resp_html
+        
+        proxies_html = sync.fetch_subscription({"name": "CloudflareProtected", "url": "https://p.com/sub", "headers": {"User-Agent": "Hiddify/2.0.5"}})
+        self.assertEqual(proxies_html, [])
+
+        # 2. Empty response
+        mock_resp_empty = MagicMock()
+        mock_resp_empty.content = b""
+        mock_session.get.return_value = mock_resp_empty
+        
+        proxies_empty = sync.fetch_subscription({"name": "EmptyProvider", "url": "https://p.com/sub", "headers": {"User-Agent": "Hiddify/2.0.5"}})
+        self.assertEqual(proxies_empty, [])
+
+    def test_dpi_bypass_node_preservation_under_ru(self):
+        """
+        Verify that Russian transit DPI bypass nodes (e.g. '[VPN] 🇷🇺 Обход ТСПУ')
+        are preserved for Tier 2 mobile survival and NOT filtered as junk.
+        """
+        bypass_node = {"name": "[VPN] 🇷🇺 Обход ТСПУ", "server": "1.2.3.4"}
+        self.assertFalse(sync.is_junk_or_auto(bypass_node))
+        self.assertEqual(sync.fallback_priority(bypass_node["name"]), 2)
+
+    def test_fallback_priority_cities_and_codes(self):
+        """
+        Verify city names and country code tokens for Tier 1 and Tier 5.
+        """
+        self.assertEqual(sync.fallback_priority("[VPN] Helsinki 01"), 1)
+        self.assertEqual(sync.fallback_priority("[VPN] Stockholm 01"), 1)
+        self.assertEqual(sync.fallback_priority("[VPN] FI-01"), 1)
+        self.assertEqual(sync.fallback_priority("[VPN] SE-02"), 1)
+        self.assertEqual(sync.fallback_priority("[VPN] New York 01"), 5)
+        self.assertEqual(sync.fallback_priority("[VPN] Los Angeles Fast"), 5)
+
+    def test_ai_priority_with_flag_emojis(self):
+        """
+        Verify that AI service priority correctly ranks nodes with flag emojis and city names.
+        """
+        self.assertEqual(sync.ai_priority("[VPN] 🇺🇸 New York"), 1)
+        self.assertEqual(sync.ai_priority("[VPN] 🇩🇪 Frankfurt"), 2)
+        self.assertEqual(sync.ai_priority("[VPN] 🇬🇧 London"), 2)
+        self.assertEqual(sync.ai_priority("[VPN] 🇸🇪 Stockholm"), 3)
+        self.assertEqual(sync.ai_priority("[VPN] 🇫🇮 Helsinki"), 3)
+
+    def test_security_scanner_line_with_allowed_and_leak(self):
+        """
+        Verify that check_diff catches real leaks even when an allowed placeholder is on the same line.
+        """
+        dom = "desiderius" + ".ru"
+        mixed_line = f"# Documentation (*.{dom}) with accident: api.{dom}"
+        violations = check_diff.scan_text(mixed_line)
+        self.assertTrue(len(violations) > 0)
+        self.assertTrue(any("Personal domain leak" in v[2] for v in violations))
+
 if __name__ == "__main__":
     unittest.main()
