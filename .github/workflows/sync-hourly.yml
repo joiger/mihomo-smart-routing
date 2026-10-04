@@ -1,0 +1,65 @@
+name: Hourly Subscription Sync
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml requests
+
+      - name: Determine Secret Token & Output Filename
+        id: token
+        run: |
+          if [ -n "${{ secrets.SECRET_TOKEN }}" ]; then
+            SECRET_HASH="${{ secrets.SECRET_TOKEN }}"
+          else
+            SECRET_HASH=$(echo -n "${{ github.repository_owner }}-${{ github.event.repository.name }}-salt-v1" | sha256sum | head -c 32)
+          fi
+          echo "hash=$SECRET_HASH" >> $GITHUB_OUTPUT
+          echo "filename=config_${SECRET_HASH}.yaml" >> $GITHUB_OUTPUT
+
+      - name: Run Subscription Sync
+        env:
+          SUBSCRIPTIONS: ${{ secrets.SUBSCRIPTIONS }}
+          OUTPUT_FILE: output/${{ steps.token.outputs.filename }}
+        run: |
+          mkdir -p output
+          python sync.py
+
+      - name: Deploy to release branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: release
+          publish_dir: ./output
+          keep_files: false
+
+      - name: Display Subscription URL
+        run: |
+          SUB_URL="https://raw.githubusercontent.com/${{ github.repository }}/release/${{ steps.token.outputs.filename }}"
+          echo "### 🚀 Ваша ссылка на подписку готова!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Скопируйте эту ссылку и вставьте во FlClash (Android) или Clash Verge (ПК):**" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "$SUB_URL" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⏱️ **Автообновление:** настроено на запуск каждый час." >> $GITHUB_STEP_SUMMARY

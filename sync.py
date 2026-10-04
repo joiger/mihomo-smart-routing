@@ -111,8 +111,9 @@ def fetch_subscription(sub_config):
     
     print(f"[*] Fetching '{name}'...")
     
-    # Use curl.exe for maximum compatibility with TLS renegotiation and cookies
-    cmd = ["curl.exe", "-s", "-L", "--max-time", "15"]
+    # Use curl with platform detection for TLS renegotiation and cookie compatibility
+    curl_bin = "curl.exe" if sys.platform == "win32" else "curl"
+    cmd = [curl_bin, "-s", "-L", "--max-time", "15"]
     
     if use_cookies:
         cookie_file = f"{name}_cookies.txt"
@@ -133,7 +134,7 @@ def fetch_subscription(sub_config):
     # Try YAML first (if subscription returns clash config directly)
     try:
         data = yaml.safe_load(raw.decode("utf-8", errors="ignore"))
-        if isinstance(data, dict) and "proxies" in data:
+        if isinstance(data, dict) and data.get("proxies"):
             proxies = data["proxies"]
             for p in proxies:
                 p["name"] = f"[{name}] {p['name']}"
@@ -156,24 +157,81 @@ def fetch_subscription(sub_config):
             if p:
                 proxies.append(p)
                 
+    if not proxies and headers.get("User-Agent") != "Hiddify/2.0.5":
+        print(f"  [i] 0 proxies found with default UA. Retrying '{name}' with Hiddify UA...")
+        sub_retry = dict(sub_config)
+        sub_retry["headers"] = dict(headers)
+        sub_retry["headers"]["User-Agent"] = "Hiddify/2.0.5"
+        return fetch_subscription(sub_retry)
+
     print(f"  -> Got {len(proxies)} proxies (URIs) from '{name}'")
     return proxies
 
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(script_dir, "config.json")
+    user_config = {}
+    subs = []
     
-    if not os.path.exists(config_path):
-        print(f"[!] config.json not found in {script_dir}!")
-        print("    Please copy config.example.json to config.json and fill in your subscription links.")
-        return 1
-        
-    with open(config_path, "r", encoding="utf-8") as f:
-        user_config = json.load(f)
-        
-    subs = user_config.get("subscriptions", [])
+    # 1. Check SUBSCRIPTIONS environment variable (ideal for GitHub Actions / Docker)
+    env_subs = os.getenv("SUBSCRIPTIONS", "").strip()
+    if env_subs:
+        print("[*] Detected SUBSCRIPTIONS environment variable.")
+        # Try JSON first
+        if env_subs.startswith("{") or env_subs.startswith("["):
+            try:
+                parsed = json.loads(env_subs)
+                if isinstance(parsed, dict):
+                    user_config = parsed
+                    subs = user_config.get("subscriptions", [])
+                elif isinstance(parsed, list):
+                    subs = [{"name": f"Sub-{i+1}", "url": u} if isinstance(u, str) else u for i, u in enumerate(parsed)]
+            except Exception:
+                pass
+                
+        # Parse line by line
+        if not subs:
+            for idx, line in enumerate(env_subs.splitlines(), start=1):
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                name = ""
+                url = line
+                if "=" in line:
+                    name, url = [x.strip() for x in line.split("=", 1)]
+                elif "|" in line:
+                    name, url = [x.strip() for x in line.split("|", 1)]
+                
+                if not name:
+                    try:
+                        netloc = urllib.parse.urlparse(url).netloc
+                        name = netloc.split(":")[0] or f"Sub-{idx}"
+                    except Exception:
+                        name = f"Sub-{idx}"
+                        
+                subs.append({
+                    "name": name,
+                    "url": url,
+                    "headers": {
+                        "User-Agent": "Clash-verge/1.7.7",
+                        "x-hwid": "e60058b76ce8305c486e9e421a91cfc2"
+                    },
+                    "use_cookies": True
+                })
+    
+    # 2. If no env variable, load config.json
     if not subs:
-        print("[!] No subscriptions defined in config.json.")
+        if not os.path.exists(config_path):
+            print(f"[!] config.json not found in {script_dir}!")
+            print("    Please copy config.example.json to config.json or set SUBSCRIPTIONS env variable.")
+            return 1
+            
+        with open(config_path, "r", encoding="utf-8") as f:
+            user_config = json.load(f)
+        subs = user_config.get("subscriptions", [])
+        
+    if not subs:
+        print("[!] No subscriptions defined. Aborting.")
         return 1
         
     all_proxies = []
@@ -233,16 +291,46 @@ def main():
         "log-level": opts.get("log_level", "info"),
         "ipv6": False,
         "external-controller": "127.0.0.1:9090",
+        "tun": {
+            "enable": True,
+            "stack": "mixed",
+            "dns-hijack": ["any:53", "tcp://any:53"],
+            "auto-route": True,
+            "auto-detect-interface": True,
+            "strict-route": False,
+            "mtu": 1420
+        },
         "dns": {
             "enable": True,
             "use-hosts": True,
             "enhanced-mode": "fake-ip",
             "fake-ip-range": "198.18.0.1/16",
-            "default-nameserver": ["77.88.8.8", "8.8.8.8"],
-            "nameserver": ["77.88.8.8", "8.8.8.8"],
+            "default-nameserver": ["77.88.8.8", "1.1.1.1"],
+            "nameserver": [
+                "https://dns.google/dns-query",
+                "https://common.dot.dns.yandex.net/dns-query",
+                "77.88.8.8",
+                "1.1.1.1"
+            ],
+            "nameserver-policy": {
+                "+.ru": "77.88.8.8",
+                "+.su": "77.88.8.8",
+                "+.xn--p1ai": "77.88.8.8",
+                "+.yandex.net": "77.88.8.8",
+                "+.vk.com": "77.88.8.8",
+                "+.gosuslugi.ru": "77.88.8.8",
+                "+.sberbank.ru": "77.88.8.8",
+                "+.tbank.ru": "77.88.8.8"
+            },
+            "proxy-server-nameserver": [
+                "77.88.8.8",
+                "1.1.1.1"
+            ],
             "fake-ip-filter": [
                 "*.lan", "*.local", "localhost", "time.*", "ntp.*",
-                "+.pool.ntp.org", "stun.*", "*.msftconnecttest.com", "*.msftncsi.com"
+                "+.pool.ntp.org", "stun.*", "*.msftconnecttest.com", "*.msftncsi.com",
+                "connectivitycheck.gstatic.com", "connectivitycheck.android.com",
+                "clients3.google.com", "+.clients.google.com", "*.push.apple.com"
             ]
         },
         "proxies": unique_proxies,
@@ -251,21 +339,14 @@ def main():
                 "name": "PROXY",
                 "type": "select",
                 "proxies": [
-                    "Auto-UrlTest",
                     "Auto-Fallback",
+                    "Auto-UrlTest",
                     "🤖 AI-Services",
                     "🎬 Media-Streaming",
                     "💬 Discord",
+                    "✈️ Telegram",
                     "🎯 Games"
                 ] + proxy_names
-            },
-            {
-                "name": "Auto-UrlTest",
-                "type": "url-test",
-                "url": "https://www.gstatic.com/generate_204",
-                "interval": 300,
-                "tolerance": 50,
-                "proxies": proxy_names
             },
             {
                 "name": "Auto-Fallback",
@@ -275,43 +356,43 @@ def main():
                 "proxies": proxy_names
             },
             {
+                "name": "Auto-UrlTest",
+                "type": "url-test",
+                "url": "https://www.gstatic.com/generate_204",
+                "interval": 600,
+                "tolerance": 150,
+                "proxies": proxy_names
+            },
+            {
                 "name": "🤖 AI-Services",
                 "type": "select",
                 "proxies": [
-                    "Auto-AI-UrlTest",
-                    "Auto-AI-Fallback"
+                    "Auto-AI-Fallback",
+                    "Auto-AI-UrlTest"
                 ] + ai_proxies
-            },
-            {
-                "name": "Auto-AI-UrlTest",
-                "type": "url-test",
-                "url": "https://generativelanguage.googleapis.com",
-                "interval": 300,
-                "tolerance": 50,
-                "proxies": ai_proxies
             },
             {
                 "name": "Auto-AI-Fallback",
                 "type": "fallback",
-                "url": "https://generativelanguage.googleapis.com",
+                "url": "https://www.gstatic.com/generate_204",
                 "interval": 300,
+                "proxies": ai_proxies
+            },
+            {
+                "name": "Auto-AI-UrlTest",
+                "type": "url-test",
+                "url": "https://www.gstatic.com/generate_204",
+                "interval": 600,
+                "tolerance": 150,
                 "proxies": ai_proxies
             },
             {
                 "name": "🎬 Media-Streaming",
                 "type": "select",
                 "proxies": [
-                    "Auto-Media-UrlTest",
-                    "Auto-Media-Fallback"
+                    "Auto-Media-Fallback",
+                    "Auto-Media-UrlTest"
                 ] + proxy_names
-            },
-            {
-                "name": "Auto-Media-UrlTest",
-                "type": "url-test",
-                "url": "https://www.youtube.com/generate_204",
-                "interval": 300,
-                "tolerance": 50,
-                "proxies": proxy_names
             },
             {
                 "name": "Auto-Media-Fallback",
@@ -321,27 +402,43 @@ def main():
                 "proxies": proxy_names
             },
             {
+                "name": "Auto-Media-UrlTest",
+                "type": "url-test",
+                "url": "https://www.youtube.com/generate_204",
+                "interval": 600,
+                "tolerance": 150,
+                "proxies": proxy_names
+            },
+            {
                 "name": "💬 Discord",
                 "type": "select",
                 "proxies": [
-                    "Auto-Discord-UrlTest",
-                    "Auto-UrlTest"
+                    "Auto-Fallback",
+                    "Auto-Discord-UrlTest"
                 ] + proxy_names
             },
             {
                 "name": "Auto-Discord-UrlTest",
                 "type": "url-test",
                 "url": "https://discord.com",
-                "interval": 300,
-                "tolerance": 50,
+                "interval": 600,
+                "tolerance": 150,
                 "proxies": proxy_names
+            },
+            {
+                "name": "✈️ Telegram",
+                "type": "select",
+                "proxies": [
+                    "Auto-Fallback",
+                    "Auto-UrlTest"
+                ] + proxy_names
             },
             {
                 "name": "🎯 Games",
                 "type": "select",
                 "proxies": [
                     "DIRECT",
-                    "Auto-UrlTest"
+                    "Auto-Fallback"
                 ] + proxy_names
             }
         ],
@@ -354,6 +451,14 @@ def main():
             "DOMAIN,localhost,DIRECT",
             "GEOIP,private,DIRECT,no-resolve",
             "GEOSITE,private,DIRECT,no-resolve",
+            
+            # Android Connectivity & System Direct
+            "DOMAIN,clients3.google.com,DIRECT",
+            "DOMAIN,connectivitycheck.gstatic.com,DIRECT",
+            "DOMAIN,connectivitycheck.android.com,DIRECT",
+            "DOMAIN-SUFFIX,gvt1.com,DIRECT",
+            "DOMAIN-SUFFIX,gvt2.com,DIRECT",
+            "DOMAIN-SUFFIX,push.apple.com,DIRECT",
             
             # 2. Games (Steam, Epic, Riot, Blizzard, EA) - DIRECT by default
             "GEOSITE,steam,🎯 Games",
@@ -371,7 +476,24 @@ def main():
             "DOMAIN-SUFFIX,battle.net,🎯 Games",
             "DOMAIN-SUFFIX,blizzard.com,🎯 Games",
             
-            # 3. Discord
+            # 4. Telegram
+            "GEOSITE,telegram,✈️ Telegram",
+            "DOMAIN-SUFFIX,t.me,✈️ Telegram",
+            "DOMAIN-SUFFIX,telegram.org,✈️ Telegram",
+            "DOMAIN-SUFFIX,telegram.me,✈️ Telegram",
+            "DOMAIN-SUFFIX,tdesktop.com,✈️ Telegram",
+            "DOMAIN-SUFFIX,telegra.ph,✈️ Telegram",
+            "GEOIP,telegram,✈️ Telegram",
+            "IP-CIDR,91.108.4.0/22,✈️ Telegram,no-resolve",
+            "IP-CIDR,91.108.8.0/22,✈️ Telegram,no-resolve",
+            "IP-CIDR,91.108.12.0/22,✈️ Telegram,no-resolve",
+            "IP-CIDR,91.108.16.0/22,✈️ Telegram,no-resolve",
+            "IP-CIDR,91.108.20.0/22,✈️ Telegram,no-resolve",
+            "IP-CIDR,91.108.56.0/22,✈️ Telegram,no-resolve",
+            "IP-CIDR,149.154.160.0/20,✈️ Telegram,no-resolve",
+            "IP-CIDR,185.76.151.0/24,✈️ Telegram,no-resolve",
+            
+            # 5. Discord
             "GEOSITE,discord,💬 Discord",
             "DOMAIN-SUFFIX,discord.com,💬 Discord",
             "DOMAIN-SUFFIX,discord.gg,💬 Discord",
@@ -379,7 +501,7 @@ def main():
             "DOMAIN-SUFFIX,discordapp.com,💬 Discord",
             "DOMAIN-SUFFIX,discordapp.net,💬 Discord",
             
-            # 4. Media & Streaming
+            # 6. Media & Streaming
             "DOMAIN-SUFFIX,googlevideo.com,🎬 Media-Streaming",
             "DOMAIN-SUFFIX,youtube.com,🎬 Media-Streaming",
             "DOMAIN-SUFFIX,ytimg.com,🎬 Media-Streaming",
@@ -423,7 +545,12 @@ def main():
         ]
     }
     
-    out_files = opts.get("output_files", ["./3-in-1_VPN.yaml"])
+    env_out = os.getenv("OUTPUT_FILE", "").strip()
+    if env_out:
+        out_files = [env_out]
+    else:
+        out_files = opts.get("output_files", ["./3-in-1_VPN.yaml"])
+        
     for out in out_files:
         expanded = os.path.expanduser(os.path.expandvars(out))
         os.makedirs(os.path.dirname(os.path.abspath(expanded)), exist_ok=True)
@@ -437,4 +564,22 @@ def main():
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main())
+    import argparse
+    import time
+    
+    parser = argparse.ArgumentParser(description="Mihomo Smart Routing & Multi-Subscription Merger")
+    parser.add_argument("--interval", type=float, default=0, help="Run repeatedly every N hours (e.g. --interval 1 for hourly sync)")
+    args = parser.parse_args()
+
+    if args.interval > 0:
+        interval_secs = int(args.interval * 3600)
+        print(f"[*] Starting auto-sync daemon (every {args.interval} hour(s))...")
+        while True:
+            try:
+                main()
+            except Exception as e:
+                print(f"[!] Error during scheduled sync: {e}")
+            print(f"[*] Next sync in {args.interval} hour(s). Waiting...")
+            time.sleep(interval_secs)
+    else:
+        sys.exit(main())

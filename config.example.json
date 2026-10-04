@@ -39,7 +39,7 @@
     "log_level": "info",
     "output_files": [
       "./3-in-1_VPN.yaml",
-      "~/Desktop/3-in-1_VPN.yaml"
+      "~/Downloads/3-in-1_VPN.yaml"
     ]
   }
 }

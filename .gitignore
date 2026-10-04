@@ -1,18 +1,25 @@
 # Private user config & subscriptions
 config.json
+config.local.json
 *.cookies.txt
+*cookies*.txt
 *.log
-
-# Generated output files (never leak private proxy configs!)
-3-in-1_VPN.yaml
-config.yaml
-final_*.yaml
+*.tmp
 *.bak
+
+# Generated output configs (never leak private proxy configs!)
+*.yaml
+*.yml
+!/.github/**/*.yml
+output/
+providers/
 
 # Python artifacts
 __pycache__/
 *.pyc
 *.pyo
+.venv/
+venv/
 
 # OS artifacts
 .DS_Store
