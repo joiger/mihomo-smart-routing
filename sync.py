@@ -245,11 +245,60 @@ def main():
     if not all_proxies:
         print("[ERROR] No proxies could be extracted. Aborting.")
         return 1
+
+    # Filter out auto-select pseudo-nodes, stubs, and pure Russian nodes
+    def is_junk_or_auto(p):
+        name = p.get("name", "").lower()
+        server = str(p.get("server", "")).lower()
+        
+        # 1. Fake servers
+        if server in ["127.0.0.1", "0.0.0.0", "localhost"]:
+            return True
+            
+        # 2. Auto-select pseudo nodes
+        auto_keywords = [
+            "автовыбор", "авто-выбор", "auto-select", "autoselect", 
+            "bestping", "best-ping", "balance", "loadbalance", "load-balance"
+        ]
+        if any(k in name for k in auto_keywords):
+            return True
+            
+        # 3. Informational / maintenance / service stubs
+        stub_keywords = [
+            "тех. работах", "техработах", "maintenance", "остаток", "трафик", "traffic",
+            "истека", "expire", "информация", "подписка", "только tg бот", "tg бот",
+            "купить", "новости", "news", "update"
+        ]
+        if any(k in name for k in stub_keywords):
+            return True
+            
+        # 4. Pure Russian nodes (waste ping / blocked destinations)
+        # Exclude relay chains that exit outside RU (e.g. 'москва → германия')
+        is_relay = "→" in name or "->" in name
+        if not is_relay:
+            if "🇷🇺" in p.get("name", ""):
+                return True
+            if any(k in name for k in ["россия", "russia"]):
+                return True
+            if "lte | все операторы" in name:
+                return True
+                
+        return False
+
+    clean_proxies = []
+    dropped_count = 0
+    for p in all_proxies:
+        if is_junk_or_auto(p):
+            dropped_count += 1
+        else:
+            clean_proxies.append(p)
+            
+    print(f"[*] Filtered out {dropped_count} junk/auto/RU nodes. Remaining active: {len(clean_proxies)}")
         
     # Deduplicate proxy names
     seen = set()
     unique_proxies = []
-    for p in all_proxies:
+    for p in clean_proxies:
         name = p["name"]
         counter = 1
         orig_name = name
@@ -261,8 +310,27 @@ def main():
         unique_proxies.append(p)
         
     proxy_names = [p["name"] for p in unique_proxies]
-    print(f"\n[INFO] Total active unique proxies assembled: {len(unique_proxies)}")
+    print(f"[INFO] Total active unique proxies assembled: {len(unique_proxies)}")
     
+    # Priority sorting for general Fallback (Finland & Sweden first, then Central/East EU, etc.)
+    def fallback_priority(name):
+        n = name.lower()
+        # Tier 1: Finland & Sweden (lowest physical ping, closest geography ~30-50ms)
+        if any(k in n for k in ["🇫🇮", "финлянди", "finland", "🇸🇪", "швеци", "sweden"]):
+            return 1
+        # Tier 2: Core Near-EU (Germany, Netherlands, Estonia, Poland, Latvia, Lithuania)
+        if any(k in n for k in ["🇩🇪", "германи", "germany", "🇳🇱", "нидерланд", "netherlands", "🇪🇪", "эстони", "estonia", "🇵🇱", "польш", "poland", "🇱🇻", "латви", "latvia", "🇱🇹", "литв", "lithuania"]):
+            return 2
+        # Tier 3: Other Europe / Regional (UK, France, Czechia, Turkey, Kazakhstan, bypass)
+        if any(k in n for k in ["🇬🇧", "united kingdom", "великобритан", "🇫🇷", "франци", "france", "🇨🇿", "чехи", "czechia", "🇹🇷", "турци", "türkiye", "turkey", "🇰🇿", "казахстан", "kazakhstan", "обход"]):
+            return 3
+        # Tier 4: USA / Americas
+        if any(k in n for k in ["🇺🇸", "сша", "usa", "united states"]):
+            return 4
+        return 5
+
+    fallback_proxies = sorted(proxy_names, key=fallback_priority)
+
     # Priority sorting for AI Services (US, DE, NL, UK, SE, FI)
     def ai_priority(name):
         n = name.lower()
@@ -278,7 +346,7 @@ def main():
 
     ai_proxies = sorted([p for p in proxy_names if ai_priority(p) < 90], key=ai_priority)
     if not ai_proxies:
-        ai_proxies = proxy_names
+        ai_proxies = fallback_proxies
 
     opts = user_config.get("options", {})
     
@@ -346,14 +414,14 @@ def main():
                     "💬 Discord",
                     "✈️ Telegram",
                     "🎯 Games"
-                ] + proxy_names
+                ] + fallback_proxies
             },
             {
                 "name": "Auto-Fallback",
                 "type": "fallback",
                 "url": "https://www.gstatic.com/generate_204",
                 "interval": 300,
-                "proxies": proxy_names
+                "proxies": fallback_proxies
             },
             {
                 "name": "Auto-UrlTest",
@@ -361,7 +429,7 @@ def main():
                 "url": "https://www.gstatic.com/generate_204",
                 "interval": 600,
                 "tolerance": 150,
-                "proxies": proxy_names
+                "proxies": fallback_proxies
             },
             {
                 "name": "🤖 AI-Services",
@@ -392,14 +460,14 @@ def main():
                 "proxies": [
                     "Auto-Media-Fallback",
                     "Auto-Media-UrlTest"
-                ] + proxy_names
+                ] + fallback_proxies
             },
             {
                 "name": "Auto-Media-Fallback",
                 "type": "fallback",
                 "url": "https://www.youtube.com/generate_204",
                 "interval": 300,
-                "proxies": proxy_names
+                "proxies": fallback_proxies
             },
             {
                 "name": "Auto-Media-UrlTest",
@@ -407,7 +475,7 @@ def main():
                 "url": "https://www.youtube.com/generate_204",
                 "interval": 600,
                 "tolerance": 150,
-                "proxies": proxy_names
+                "proxies": fallback_proxies
             },
             {
                 "name": "💬 Discord",
@@ -415,7 +483,7 @@ def main():
                 "proxies": [
                     "Auto-Fallback",
                     "Auto-Discord-UrlTest"
-                ] + proxy_names
+                ] + fallback_proxies
             },
             {
                 "name": "Auto-Discord-UrlTest",
@@ -423,7 +491,7 @@ def main():
                 "url": "https://discord.com",
                 "interval": 600,
                 "tolerance": 150,
-                "proxies": proxy_names
+                "proxies": fallback_proxies
             },
             {
                 "name": "✈️ Telegram",
@@ -431,7 +499,7 @@ def main():
                 "proxies": [
                     "Auto-Fallback",
                     "Auto-UrlTest"
-                ] + proxy_names
+                ] + fallback_proxies
             },
             {
                 "name": "🎯 Games",
@@ -439,7 +507,7 @@ def main():
                 "proxies": [
                     "DIRECT",
                     "Auto-Fallback"
-                ] + proxy_names
+                ] + fallback_proxies
             }
         ],
         "rules": [
