@@ -827,6 +827,99 @@ def ai_priority(name):
         return 99
     return 10
 
+DEFAULT_CATEGORIES = [
+    {
+        "name": "🎯 Games",
+        "default_options": ["DIRECT", "Auto-Fallback", "Auto-UrlTest"],
+        "rules": [
+            "GEOSITE,steam",
+            "GEOSITE,epicgames",
+            "GEOSITE,riot",
+            "GEOSITE,blizzard",
+            "GEOSITE,ea",
+            "DOMAIN-SUFFIX,steampowered.com",
+            "DOMAIN-SUFFIX,steamcommunity.com",
+            "DOMAIN-SUFFIX,steamserver.net",
+            "DOMAIN-SUFFIX,epicgames.com",
+            "DOMAIN-SUFFIX,riotgames.com",
+            "DOMAIN-SUFFIX,leagueoflegends.com",
+            "DOMAIN-SUFFIX,ea.com",
+            "DOMAIN-SUFFIX,battle.net",
+            "DOMAIN-SUFFIX,blizzard.com",
+        ]
+    },
+    {
+        "name": "✈️ Telegram",
+        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "rules": [
+            "GEOSITE,telegram",
+            "DOMAIN-SUFFIX,t.me",
+            "DOMAIN-SUFFIX,telegram.org",
+            "DOMAIN-SUFFIX,telegram.me",
+            "DOMAIN-SUFFIX,tdesktop.com",
+            "DOMAIN-SUFFIX,telegra.ph",
+            "GEOIP,telegram",
+            "IP-CIDR,91.108.4.0/22,no-resolve",
+            "IP-CIDR,91.108.8.0/22,no-resolve",
+            "IP-CIDR,91.108.12.0/22,no-resolve",
+            "IP-CIDR,91.108.16.0/22,no-resolve",
+            "IP-CIDR,91.108.20.0/22,no-resolve",
+            "IP-CIDR,91.108.56.0/22,no-resolve",
+            "IP-CIDR,149.154.160.0/20,no-resolve",
+            "IP-CIDR,185.76.151.0/24,no-resolve",
+        ]
+    },
+    {
+        "name": "💬 Discord",
+        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "rules": [
+            "GEOSITE,discord",
+            "DOMAIN-SUFFIX,discord.com",
+            "DOMAIN-SUFFIX,discord.gg",
+            "DOMAIN-SUFFIX,discord.media",
+            "DOMAIN-SUFFIX,discordapp.com",
+            "DOMAIN-SUFFIX,discordapp.net",
+        ]
+    },
+    {
+        "name": "🎬 Media-Streaming",
+        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "rules": [
+            "DOMAIN-SUFFIX,googlevideo.com",
+            "DOMAIN-SUFFIX,youtube.com",
+            "DOMAIN-SUFFIX,ytimg.com",
+            "DOMAIN-SUFFIX,youtu.be",
+            "DOMAIN-SUFFIX,soundcloud.com",
+            "DOMAIN-SUFFIX,sndcdn.com",
+        ]
+    },
+    {
+        "name": "🤖 AI-Services",
+        "priority": "ai",
+        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "rules": [
+            "DOMAIN-SUFFIX,gemini.google.com",
+            "DOMAIN-SUFFIX,generativelanguage.googleapis.com",
+            "DOMAIN-SUFFIX,aistudio.google.com",
+            "DOMAIN-SUFFIX,deepmind.google",
+            "DOMAIN-SUFFIX,deepmind.com",
+            "DOMAIN-SUFFIX,proactivebackend-pa.googleapis.com",
+            "DOMAIN-SUFFIX,alkalimakersuite-pa.googleapis.com",
+            "DOMAIN-SUFFIX,google.com",
+            "DOMAIN-SUFFIX,googleapis.com",
+            "DOMAIN-SUFFIX,gstatic.com",
+            "DOMAIN-SUFFIX,googleusercontent.com",
+            "DOMAIN-SUFFIX,anthropic.com",
+            "DOMAIN-SUFFIX,claude.ai",
+            "DOMAIN-SUFFIX,openai.com",
+            "DOMAIN-SUFFIX,chatgpt.com",
+            "GEOSITE,google-gemini",
+            "GEOSITE,openai",
+            "GEOSITE,anthropic",
+        ]
+    }
+]
+
 def build_mihomo_config(unique_proxies, user_options=None):
     if user_options is None:
         user_options = {}
@@ -844,6 +937,118 @@ def build_mihomo_config(unique_proxies, user_options=None):
         ai_proxies = fallback_proxies
 
     opts = user_options or {}
+
+    # Category Constructor: custom user categories or defaults
+    categories = opts.get("categories") or DEFAULT_CATEGORIES
+    category_names = [cat["name"] for cat in categories]
+
+    # Clean FlClash UI: Only top-level connectors + category selectors
+    # No redundant child groups like Auto-AI-Fallback or Auto-Media-UrlTest!
+    proxy_groups = [
+        {
+            "name": "PROXY",
+            "type": "select",
+            "proxies": [
+                "Auto-Fallback",
+                "🛡️ Mobile-Bypass",
+                "Auto-UrlTest",
+            ] + category_names + fallback_proxies
+        },
+        {
+            "name": "Auto-Fallback",
+            "type": "fallback",
+            "url": "https://www.gstatic.com/generate_204",
+            "interval": 20,
+            "timeout": 2500,
+            "lazy": False,
+            "max-failed-times": 2,
+            "proxies": fallback_proxies
+        },
+        {
+            "name": "🛡️ Mobile-Bypass",
+            "type": "fallback",
+            "url": "https://www.gstatic.com/generate_204",
+            "interval": 20,
+            "timeout": 2500,
+            "lazy": False,
+            "max-failed-times": 2,
+            "proxies": mobile_proxies
+        },
+        {
+            "name": "Auto-UrlTest",
+            "type": "url-test",
+            "url": "https://www.gstatic.com/generate_204",
+            "interval": 30,
+            "timeout": 2500,
+            "tolerance": 50,
+            "lazy": False,
+            "proxies": fallback_proxies
+        }
+    ]
+
+    # Build category selector groups
+    for cat in categories:
+        cat_name = cat["name"]
+        cat_priority = cat.get("priority", "fallback")
+        if cat_priority == "ai":
+            cat_proxies = ai_proxies
+        else:
+            cat_proxies = fallback_proxies
+
+        default_opts = cat.get("default_options", ["Auto-Fallback", "Auto-UrlTest", "DIRECT"])
+        proxy_groups.append({
+            "name": cat_name,
+            "type": cat.get("type", "select"),
+            "proxies": default_opts + cat_proxies
+        })
+
+    # Assemble rules modularly
+    base_rules = [
+        # 1. Local & Loopback
+        "IP-CIDR,127.0.0.0/8,DIRECT,no-resolve",
+        "IP-CIDR,172.16.0.0/12,DIRECT,no-resolve",
+        "IP-CIDR,192.168.0.0/16,DIRECT,no-resolve",
+        "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve",
+        "DOMAIN,localhost,DIRECT",
+        "GEOIP,private,DIRECT,no-resolve",
+        "GEOSITE,private,DIRECT,no-resolve",
+        
+        # Android Connectivity & System Direct
+        "DOMAIN,clients3.google.com,DIRECT",
+        "DOMAIN,connectivitycheck.gstatic.com,DIRECT",
+        "DOMAIN,connectivitycheck.android.com,DIRECT",
+        "DOMAIN-SUFFIX,gvt1.com,DIRECT",
+        "DOMAIN-SUFFIX,gvt2.com,DIRECT",
+        "DOMAIN-SUFFIX,push.apple.com,DIRECT",
+    ]
+
+    category_rules = []
+    for cat in categories:
+        cat_name = cat["name"]
+        for r in cat.get("rules", []):
+            parts = [p.strip() for p in r.split(",")]
+            if len(parts) == 2:
+                category_rules.append(f"{parts[0]},{parts[1]},{cat_name}")
+            elif len(parts) == 3 and parts[2].lower() == "no-resolve":
+                category_rules.append(f"{parts[0]},{parts[1]},{cat_name},no-resolve")
+            else:
+                category_rules.append(r)
+
+    direct_ru_rules = [
+        # Russian Services (Direct)
+        "DOMAIN-SUFFIX,ru,DIRECT",
+        "DOMAIN-SUFFIX,su,DIRECT",
+        "DOMAIN-SUFFIX,xn--p1ai,DIRECT",
+        "DOMAIN-SUFFIX,yandex.ru,DIRECT",
+        "DOMAIN-SUFFIX,vk.com,DIRECT",
+        "DOMAIN-SUFFIX,sberbank.ru,DIRECT",
+        "DOMAIN-SUFFIX,tbank.ru,DIRECT",
+        "DOMAIN-SUFFIX,gosuslugi.ru,DIRECT",
+        "GEOIP,RU,DIRECT",
+        
+        # Match All Other
+        "MATCH,PROXY"
+    ]
 
     final_config = {
         "mixed-port": opts.get("mixed_port", opts.get("mixed-port", 7890)),
@@ -900,243 +1105,8 @@ def build_mihomo_config(unique_proxies, user_options=None):
             ]
         },
         "proxies": unique_proxies,
-        "proxy-groups": [
-            {
-                "name": "PROXY",
-                "type": "select",
-                "proxies": [
-                    "Auto-Fallback",
-                    "🛡️ Mobile-Bypass",
-                    "Auto-UrlTest",
-                    "🤖 AI-Services",
-                    "🎬 Media-Streaming",
-                    "💬 Discord",
-                    "✈️ Telegram",
-                    "🎯 Games"
-                ] + fallback_proxies
-            },
-            {
-                "name": "Auto-Fallback",
-                "type": "fallback",
-                "url": "https://www.gstatic.com/generate_204",
-                "interval": 20,
-                "timeout": 2500,
-                "lazy": False,
-                "max-failed-times": 2,
-                "proxies": fallback_proxies
-            },
-            {
-                "name": "🛡️ Mobile-Bypass",
-                "type": "fallback",
-                "url": "https://www.gstatic.com/generate_204",
-                "interval": 20,
-                "timeout": 2500,
-                "lazy": False,
-                "max-failed-times": 2,
-                "proxies": mobile_proxies
-            },
-            {
-                "name": "Auto-UrlTest",
-                "type": "url-test",
-                "url": "https://www.gstatic.com/generate_204",
-                "interval": 30,
-                "timeout": 2500,
-                "tolerance": 50,
-                "lazy": False,
-                "proxies": fallback_proxies
-            },
-            {
-                "name": "🤖 AI-Services",
-                "type": "select",
-                "proxies": [
-                    "Auto-AI-Fallback",
-                    "Auto-AI-UrlTest"
-                ] + ai_proxies
-            },
-            {
-                "name": "Auto-AI-Fallback",
-                "type": "fallback",
-                "url": "https://www.gstatic.com/generate_204",
-                "interval": 20,
-                "timeout": 2500,
-                "lazy": False,
-                "max-failed-times": 2,
-                "proxies": ai_proxies
-            },
-            {
-                "name": "Auto-AI-UrlTest",
-                "type": "url-test",
-                "url": "https://www.gstatic.com/generate_204",
-                "interval": 30,
-                "timeout": 2500,
-                "tolerance": 50,
-                "lazy": False,
-                "proxies": ai_proxies
-            },
-            {
-                "name": "🎬 Media-Streaming",
-                "type": "select",
-                "proxies": [
-                    "Auto-Media-Fallback",
-                    "Auto-Media-UrlTest"
-                ] + fallback_proxies
-            },
-            {
-                "name": "Auto-Media-Fallback",
-                "type": "fallback",
-                "url": "https://www.youtube.com/generate_204",
-                "interval": 20,
-                "timeout": 2500,
-                "lazy": False,
-                "max-failed-times": 2,
-                "proxies": fallback_proxies
-            },
-            {
-                "name": "Auto-Media-UrlTest",
-                "type": "url-test",
-                "url": "https://www.youtube.com/generate_204",
-                "interval": 30,
-                "timeout": 2500,
-                "tolerance": 50,
-                "lazy": False,
-                "proxies": fallback_proxies
-            },
-            {
-                "name": "💬 Discord",
-                "type": "select",
-                "proxies": [
-                    "Auto-Fallback",
-                    "Auto-Discord-UrlTest"
-                ] + fallback_proxies
-            },
-            {
-                "name": "Auto-Discord-UrlTest",
-                "type": "url-test",
-                "url": "https://discord.com",
-                "interval": 30,
-                "timeout": 2500,
-                "tolerance": 50,
-                "lazy": False,
-                "proxies": fallback_proxies
-            },
-            {
-                "name": "✈️ Telegram",
-                "type": "select",
-                "proxies": [
-                    "Auto-Fallback",
-                    "Auto-UrlTest"
-                ] + fallback_proxies
-            },
-            {
-                "name": "🎯 Games",
-                "type": "select",
-                "proxies": [
-                    "DIRECT",
-                    "Auto-Fallback"
-                ] + fallback_proxies
-            }
-        ],
-        "rules": [
-            # 1. Local & Loopback
-            "IP-CIDR,127.0.0.0/8,DIRECT,no-resolve",
-            "IP-CIDR,172.16.0.0/12,DIRECT,no-resolve",
-            "IP-CIDR,192.168.0.0/16,DIRECT,no-resolve",
-            "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve",
-            "DOMAIN,localhost,DIRECT",
-            "GEOIP,private,DIRECT,no-resolve",
-            "GEOSITE,private,DIRECT,no-resolve",
-            
-            # Android Connectivity & System Direct
-            "DOMAIN,clients3.google.com,DIRECT",
-            "DOMAIN,connectivitycheck.gstatic.com,DIRECT",
-            "DOMAIN,connectivitycheck.android.com,DIRECT",
-            "DOMAIN-SUFFIX,gvt1.com,DIRECT",
-            "DOMAIN-SUFFIX,gvt2.com,DIRECT",
-            "DOMAIN-SUFFIX,push.apple.com,DIRECT",
-            
-            # 2. Games (Steam, Epic, Riot, Blizzard, EA) - DIRECT by default
-            "GEOSITE,steam,🎯 Games",
-            "GEOSITE,epicgames,🎯 Games",
-            "GEOSITE,riot,🎯 Games",
-            "GEOSITE,blizzard,🎯 Games",
-            "GEOSITE,ea,🎯 Games",
-            "DOMAIN-SUFFIX,steampowered.com,🎯 Games",
-            "DOMAIN-SUFFIX,steamcommunity.com,🎯 Games",
-            "DOMAIN-SUFFIX,steamserver.net,🎯 Games",
-            "DOMAIN-SUFFIX,epicgames.com,🎯 Games",
-            "DOMAIN-SUFFIX,riotgames.com,🎯 Games",
-            "DOMAIN-SUFFIX,leagueoflegends.com,🎯 Games",
-            "DOMAIN-SUFFIX,ea.com,🎯 Games",
-            "DOMAIN-SUFFIX,battle.net,🎯 Games",
-            "DOMAIN-SUFFIX,blizzard.com,🎯 Games",
-            
-            # 3. Telegram
-            "GEOSITE,telegram,✈️ Telegram",
-            "DOMAIN-SUFFIX,t.me,✈️ Telegram",
-            "DOMAIN-SUFFIX,telegram.org,✈️ Telegram",
-            "DOMAIN-SUFFIX,telegram.me,✈️ Telegram",
-            "DOMAIN-SUFFIX,tdesktop.com,✈️ Telegram",
-            "DOMAIN-SUFFIX,telegra.ph,✈️ Telegram",
-            "GEOIP,telegram,✈️ Telegram",
-            "IP-CIDR,91.108.4.0/22,✈️ Telegram,no-resolve",
-            "IP-CIDR,91.108.8.0/22,✈️ Telegram,no-resolve",
-            "IP-CIDR,91.108.12.0/22,✈️ Telegram,no-resolve",
-            "IP-CIDR,91.108.16.0/22,✈️ Telegram,no-resolve",
-            "IP-CIDR,91.108.20.0/22,✈️ Telegram,no-resolve",
-            "IP-CIDR,91.108.56.0/22,✈️ Telegram,no-resolve",
-            "IP-CIDR,149.154.160.0/20,✈️ Telegram,no-resolve",
-            "IP-CIDR,185.76.151.0/24,✈️ Telegram,no-resolve",
-            
-            # 4. Discord
-            "GEOSITE,discord,💬 Discord",
-            "DOMAIN-SUFFIX,discord.com,💬 Discord",
-            "DOMAIN-SUFFIX,discord.gg,💬 Discord",
-            "DOMAIN-SUFFIX,discord.media,💬 Discord",
-            "DOMAIN-SUFFIX,discordapp.com,💬 Discord",
-            "DOMAIN-SUFFIX,discordapp.net,💬 Discord",
-            
-            # 5. Media & Streaming
-            "DOMAIN-SUFFIX,googlevideo.com,🎬 Media-Streaming",
-            "DOMAIN-SUFFIX,youtube.com,🎬 Media-Streaming",
-            "DOMAIN-SUFFIX,ytimg.com,🎬 Media-Streaming",
-            "DOMAIN-SUFFIX,youtu.be,🎬 Media-Streaming",
-            "DOMAIN-SUFFIX,soundcloud.com,🎬 Media-Streaming",
-            "DOMAIN-SUFFIX,sndcdn.com,🎬 Media-Streaming",
-            
-            # 6. AI Services & Google Ecosystem
-            "DOMAIN-SUFFIX,gemini.google.com,🤖 AI-Services",
-            "DOMAIN-SUFFIX,generativelanguage.googleapis.com,🤖 AI-Services",
-            "DOMAIN-SUFFIX,aistudio.google.com,🤖 AI-Services",
-            "DOMAIN-SUFFIX,deepmind.google,🤖 AI-Services",
-            "DOMAIN-SUFFIX,deepmind.com,🤖 AI-Services",
-            "DOMAIN-SUFFIX,proactivebackend-pa.googleapis.com,🤖 AI-Services",
-            "DOMAIN-SUFFIX,alkalimakersuite-pa.googleapis.com,🤖 AI-Services",
-            "DOMAIN-SUFFIX,google.com,🤖 AI-Services",
-            "DOMAIN-SUFFIX,googleapis.com,🤖 AI-Services",
-            "DOMAIN-SUFFIX,gstatic.com,🤖 AI-Services",
-            "DOMAIN-SUFFIX,googleusercontent.com,🤖 AI-Services",
-            "DOMAIN-SUFFIX,anthropic.com,🤖 AI-Services",
-            "DOMAIN-SUFFIX,claude.ai,🤖 AI-Services",
-            "DOMAIN-SUFFIX,openai.com,🤖 AI-Services",
-            "DOMAIN-SUFFIX,chatgpt.com,🤖 AI-Services",
-            "GEOSITE,google-gemini,🤖 AI-Services",
-            "GEOSITE,openai,🤖 AI-Services",
-            "GEOSITE,anthropic,🤖 AI-Services",
-            
-            # 7. Russian Services (Direct)
-            "DOMAIN-SUFFIX,ru,DIRECT",
-            "DOMAIN-SUFFIX,su,DIRECT",
-            "DOMAIN-SUFFIX,xn--p1ai,DIRECT",
-            "DOMAIN-SUFFIX,yandex.ru,DIRECT",
-            "DOMAIN-SUFFIX,vk.com,DIRECT",
-            "DOMAIN-SUFFIX,sberbank.ru,DIRECT",
-            "DOMAIN-SUFFIX,tbank.ru,DIRECT",
-            "DOMAIN-SUFFIX,gosuslugi.ru,DIRECT",
-            "GEOIP,RU,DIRECT",
-            
-            # 8. Match All Other
-            "MATCH,PROXY"
-        ]
+        "proxy-groups": proxy_groups,
+        "rules": base_rules + category_rules + direct_ru_rules
     }
     return final_config
 

@@ -38,8 +38,64 @@
     "mode": "rule",
     "log_level": "info",
     "output_files": [
-      "./3-in-1_VPN.yaml",
-      "~/Downloads/3-in-1_VPN.yaml"
+      "./Aegis.yaml",
+      "~/Downloads/Aegis.yaml"
+    ],
+    "categories": [
+      {
+        "name": "🎯 Games",
+        "default_options": ["DIRECT", "Auto-Fallback", "Auto-UrlTest"],
+        "rules": [
+          "GEOSITE,steam",
+          "GEOSITE,epicgames",
+          "GEOSITE,riot",
+          "DOMAIN-SUFFIX,steampowered.com",
+          "DOMAIN-SUFFIX,epicgames.com"
+        ]
+      },
+      {
+        "name": "✈️ Telegram",
+        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "rules": [
+          "GEOSITE,telegram",
+          "DOMAIN-SUFFIX,t.me",
+          "DOMAIN-SUFFIX,telegram.org",
+          "GEOIP,telegram"
+        ]
+      },
+      {
+        "name": "💬 Discord",
+        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "rules": [
+          "GEOSITE,discord",
+          "DOMAIN-SUFFIX,discord.com",
+          "DOMAIN-SUFFIX,discord.gg"
+        ]
+      },
+      {
+        "name": "🎬 Media-Streaming",
+        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "rules": [
+          "DOMAIN-SUFFIX,youtube.com",
+          "DOMAIN-SUFFIX,googlevideo.com",
+          "DOMAIN-SUFFIX,soundcloud.com"
+        ]
+      },
+      {
+        "name": "🤖 AI-Services",
+        "priority": "ai",
+        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "rules": [
+          "DOMAIN-SUFFIX,openai.com",
+          "DOMAIN-SUFFIX,chatgpt.com",
+          "DOMAIN-SUFFIX,anthropic.com",
+          "DOMAIN-SUFFIX,claude.ai",
+          "DOMAIN-SUFFIX,gemini.google.com",
+          "GEOSITE,openai",
+          "GEOSITE,anthropic",
+          "GEOSITE,google-gemini"
+        ]
+      }
     ]
   }
 }
