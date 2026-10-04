@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   sync:
@@ -25,41 +25,82 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyyaml requests
 
-      - name: Determine Secret Token & Output Filename
-        id: token
-        run: |
-          if [ -n "${{ secrets.SECRET_TOKEN }}" ]; then
-            SECRET_HASH="${{ secrets.SECRET_TOKEN }}"
-          else
-            SECRET_HASH=$(echo -n "${{ github.repository_owner }}-${{ github.event.repository.name }}-salt-v1" | sha256sum | head -c 32)
-          fi
-          echo "hash=$SECRET_HASH" >> $GITHUB_OUTPUT
-          echo "filename=config_${SECRET_HASH}.yaml" >> $GITHUB_OUTPUT
-
       - name: Run Subscription Sync
         env:
           SUBSCRIPTIONS: ${{ secrets.SUBSCRIPTIONS }}
-          OUTPUT_FILE: output/${{ steps.token.outputs.filename }}
+          OUTPUT_FILE: output/config.yaml
         run: |
           mkdir -p output
           python sync.py
 
-      - name: Deploy to release branch
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: release
-          publish_dir: ./output
-          keep_files: false
-
-      - name: Display Subscription URL
+      - name: Deploy to Secret Gist (100% Private)
+        env:
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+          GIST_ID: ${{ secrets.GIST_ID }}
         run: |
-          SUB_URL="https://raw.githubusercontent.com/${{ github.repository }}/release/${{ steps.token.outputs.filename }}"
-          echo "### 🚀 Ваша ссылка на подписку готова!" >> $GITHUB_STEP_SUMMARY
+          python - << 'EOF'
+          import os, sys, json, urllib.request
+
+          token = os.environ.get("GIST_TOKEN", "").strip()
+          gist_id = os.environ.get("GIST_ID", "").strip()
+
+          if not token:
+              print("[!] GIST_TOKEN secret is not set. Please add a GitHub PAT with 'gist' scope in Settings -> Secrets -> Actions.")
+              sys.exit(1)
+
+          with open("output/config.yaml", "r", encoding="utf-8") as f:
+              content = f.read()
+
+          headers = {
+              "Authorization": f"token {token}",
+              "User-Agent": "Mihomo-Sync-Action",
+              "Content-Type": "application/json"
+          }
+
+          payload = json.dumps({
+              "description": "Mihomo Smart Routing Config (100% Private)",
+              "files": {
+                  "config.yaml": {
+                      "content": content
+                  }
+              }
+          }).encode("utf-8")
+
+          # If GIST_ID exists, update it. Otherwise create it.
+          if gist_id:
+              url = f"https://api.github.com/gists/{gist_id}"
+              req = urllib.request.Request(url, data=payload, headers=headers, method="PATCH")
+              action_name = "Updated"
+          else:
+              url = "https://api.github.com/gists"
+              create_payload = json.dumps({
+                  "description": "Mihomo Smart Routing Config (100% Private)",
+                  "public": False,
+                  "files": {
+                      "config.yaml": {
+                          "content": content
+                      }
+                  }
+              }).encode("utf-8")
+              req = urllib.request.Request(url, data=create_payload, headers=headers, method="POST")
+              action_name = "Created"
+
+          try:
+              with urllib.request.urlopen(req) as resp:
+                  res = json.loads(resp.read().decode())
+                  final_id = res["id"]
+                  print(f"[OK] Successfully {action_name} Secret Gist!")
+                  print(f"::add-mask::{final_id}")
+          except Exception as e:
+              print(f"[ERROR] Failed to update/create Gist: {e}")
+              sys.exit(1)
+          EOF
+
+      - name: Status Report
+        run: |
+          echo "### 🔒 Конфигурация успешно синхронизирована с Secret Gist!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Скопируйте эту ссылку и вставьте во FlClash (Android) или Clash Verge (ПК):**" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "$SUB_URL" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "Все ноды обновлены и сохранены в вашем скрытом Secret Gist." >> $GITHUB_STEP_SUMMARY
+          echo "Файл недоступен никому в открытом репозитории, форках или поиске." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "⏱️ **Автообновление:** настроено на запуск каждый час." >> $GITHUB_STEP_SUMMARY
+          echo "⏱️ **Следующее автообновление:** ровно через 1 час." >> $GITHUB_STEP_SUMMARY
