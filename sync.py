@@ -312,24 +312,31 @@ def main():
     proxy_names = [p["name"] for p in unique_proxies]
     print(f"[INFO] Total active unique proxies assembled: {len(unique_proxies)}")
     
-    # Priority sorting for general Fallback (Finland & Sweden first, then Central/East EU, etc.)
+    # Priority sorting for general Fallback (Finland & Sweden first, then Relays/DPI bypasses, then Central EU, etc.)
     def fallback_priority(name):
         n = name.lower()
         # Tier 1: Finland & Sweden (lowest physical ping, closest geography ~30-50ms)
         if any(k in n for k in ["🇫🇮", "финлянди", "finland", "🇸🇪", "швеци", "sweden"]):
             return 1
-        # Tier 2: Core Near-EU (Germany, Netherlands, Estonia, Poland, Latvia, Lithuania)
-        if any(k in n for k in ["🇩🇪", "германи", "germany", "🇳🇱", "нидерланд", "netherlands", "🇪🇪", "эстони", "estonia", "🇵🇱", "польш", "poland", "🇱🇻", "латви", "latvia", "🇱🇹", "литв", "lithuania"]):
+        # Tier 2: Relay bridges & DPI bypasses (Instant failover for Mobile LTE under TSPU / white-lists)
+        if any(k in n for k in ["→", "->", "обход"]):
             return 2
-        # Tier 3: Other Europe / Regional (UK, France, Czechia, Turkey, Kazakhstan, bypass)
-        if any(k in n for k in ["🇬🇧", "united kingdom", "великобритан", "🇫🇷", "франци", "france", "🇨🇿", "чехи", "czechia", "🇹🇷", "турци", "türkiye", "turkey", "🇰🇿", "казахстан", "kazakhstan", "обход"]):
+        # Tier 3: Core Near-EU (Germany, Netherlands, Estonia, Poland, Latvia, Lithuania)
+        if any(k in n for k in ["🇩🇪", "германи", "germany", "🇳🇱", "нидерланд", "netherlands", "🇪🇪", "эстони", "estonia", "🇵🇱", "польш", "poland", "🇱🇻", "латви", "latvia", "🇱🇹", "литв", "lithuania"]):
             return 3
-        # Tier 4: USA / Americas
-        if any(k in n for k in ["🇺🇸", "сша", "usa", "united states"]):
+        # Tier 4: Other Europe / Regional (UK, France, Czechia, Turkey, Kazakhstan)
+        if any(k in n for k in ["🇬🇧", "united kingdom", "великобритан", "🇫🇷", "франци", "france", "🇨🇿", "чехи", "czechia", "🇹🇷", "турци", "türkiye", "turkey", "🇰🇿", "казахстан", "kazakhstan"]):
             return 4
-        return 5
+        # Tier 5: USA / Americas
+        if any(k in n for k in ["🇺🇸", "сша", "usa", "united states"]):
+            return 5
+        return 6
 
     fallback_proxies = sorted(proxy_names, key=fallback_priority)
+
+    # Dedicated list for Mobile LTE / DPI bypass (Relays & Bypasses first)
+    relays_and_bypasses = [p for p in fallback_proxies if any(k in p.lower() for k in ["→", "->", "обход"])]
+    mobile_proxies = relays_and_bypasses + [p for p in fallback_proxies if p not in relays_and_bypasses] if relays_and_bypasses else fallback_proxies
 
     # Priority sorting for AI Services (US, DE, NL, UK, SE, FI)
     def ai_priority(name):
@@ -358,6 +365,8 @@ def main():
         "mode": opts.get("mode", "rule"),
         "log-level": opts.get("log_level", "info"),
         "ipv6": False,
+        "tcp-concurrent": True,
+        "keep-alive-interval": 15,
         "external-controller": "127.0.0.1:9090",
         "tun": {
             "enable": True,
@@ -365,7 +374,8 @@ def main():
             "dns-hijack": ["any:53", "tcp://any:53"],
             "auto-route": True,
             "auto-detect-interface": True,
-            "strict-route": False,
+            "strict-route": True,
+            "endpoint-independent-nat": True,
             "mtu": 1420
         },
         "dns": {
@@ -408,6 +418,7 @@ def main():
                 "type": "select",
                 "proxies": [
                     "Auto-Fallback",
+                    "🛡️ Mobile-Bypass",
                     "Auto-UrlTest",
                     "🤖 AI-Services",
                     "🎬 Media-Streaming",
@@ -420,15 +431,30 @@ def main():
                 "name": "Auto-Fallback",
                 "type": "fallback",
                 "url": "https://www.gstatic.com/generate_204",
-                "interval": 300,
+                "interval": 20,
+                "timeout": 2500,
+                "lazy": False,
+                "max-failed-times": 2,
                 "proxies": fallback_proxies
+            },
+            {
+                "name": "🛡️ Mobile-Bypass",
+                "type": "fallback",
+                "url": "https://www.gstatic.com/generate_204",
+                "interval": 20,
+                "timeout": 2500,
+                "lazy": False,
+                "max-failed-times": 2,
+                "proxies": mobile_proxies
             },
             {
                 "name": "Auto-UrlTest",
                 "type": "url-test",
                 "url": "https://www.gstatic.com/generate_204",
-                "interval": 600,
-                "tolerance": 150,
+                "interval": 30,
+                "timeout": 2500,
+                "tolerance": 50,
+                "lazy": False,
                 "proxies": fallback_proxies
             },
             {
@@ -443,15 +469,20 @@ def main():
                 "name": "Auto-AI-Fallback",
                 "type": "fallback",
                 "url": "https://www.gstatic.com/generate_204",
-                "interval": 300,
+                "interval": 20,
+                "timeout": 2500,
+                "lazy": False,
+                "max-failed-times": 2,
                 "proxies": ai_proxies
             },
             {
                 "name": "Auto-AI-UrlTest",
                 "type": "url-test",
                 "url": "https://www.gstatic.com/generate_204",
-                "interval": 600,
-                "tolerance": 150,
+                "interval": 30,
+                "timeout": 2500,
+                "tolerance": 50,
+                "lazy": False,
                 "proxies": ai_proxies
             },
             {
@@ -466,15 +497,20 @@ def main():
                 "name": "Auto-Media-Fallback",
                 "type": "fallback",
                 "url": "https://www.youtube.com/generate_204",
-                "interval": 300,
+                "interval": 20,
+                "timeout": 2500,
+                "lazy": False,
+                "max-failed-times": 2,
                 "proxies": fallback_proxies
             },
             {
                 "name": "Auto-Media-UrlTest",
                 "type": "url-test",
                 "url": "https://www.youtube.com/generate_204",
-                "interval": 600,
-                "tolerance": 150,
+                "interval": 30,
+                "timeout": 2500,
+                "tolerance": 50,
+                "lazy": False,
                 "proxies": fallback_proxies
             },
             {
@@ -489,8 +525,10 @@ def main():
                 "name": "Auto-Discord-UrlTest",
                 "type": "url-test",
                 "url": "https://discord.com",
-                "interval": 600,
-                "tolerance": 150,
+                "interval": 30,
+                "timeout": 2500,
+                "tolerance": 50,
+                "lazy": False,
                 "proxies": fallback_proxies
             },
             {
