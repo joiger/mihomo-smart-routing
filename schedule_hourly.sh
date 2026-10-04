@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ========================================================
-# Настройка ежечасного обновления подписок через cron
+# Настройка ежечасного обновления подписок Aegis через cron
 # ========================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,5 +9,5 @@ CRON_JOB="0 * * * * $(which python3 || echo python3) \"$SCRIPT_PATH\" >/dev/null
 
 (crontab -l 2>/dev/null | grep -Fv "$SCRIPT_PATH" ; echo "$CRON_JOB") | crontab -
 
-echo "[OK] Ежечасное автообновление настроено через cron:"
+echo "[OK] Ежечасное автообновление Aegis настроено через cron:"
 echo "     $CRON_JOB"

@@ -1,4 +1,4 @@
-name: Hourly Subscription Sync
+name: Aegis Hourly Subscription Sync
 
 on:
   schedule:
@@ -23,9 +23,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyyaml requests
+          pip install -r requirements.txt
 
-      - name: Run Subscription Sync
+      - name: Security Audit (Zero Leaks Verification)
+        run: |
+          python scripts/check_diff.py
+
+      - name: Run Aegis Subscription Sync
         env:
           SUBSCRIPTIONS: ${{ secrets.SUBSCRIPTIONS }}
           OUTPUT_FILE: output/config.yaml
@@ -48,17 +52,22 @@ jobs:
               print("[!] GIST_TOKEN secret is not set. Please add a GitHub PAT with 'gist' scope in Settings -> Secrets -> Actions.")
               sys.exit(1)
 
+          # Mask secrets and identifiers in workflow output
+          print(f"::add-mask::{token}", flush=True)
+          if gist_id:
+              print(f"::add-mask::{gist_id}", flush=True)
+
           with open("output/config.yaml", "r", encoding="utf-8") as f:
               content = f.read()
 
           headers = {
               "Authorization": f"token {token}",
-              "User-Agent": "Mihomo-Sync-Action",
+              "User-Agent": "Aegis-Sync-Action",
               "Content-Type": "application/json"
           }
 
           payload = json.dumps({
-              "description": "Mihomo Smart Routing Config (100% Private)",
+              "description": "Aegis — Smart Routing & Multi-Subscription Merger (100% Private)",
               "files": {
                   "config.yaml": {
                       "content": content
@@ -66,7 +75,7 @@ jobs:
               }
           }).encode("utf-8")
 
-          # If GIST_ID exists, update it. Otherwise create it.
+          # If GIST_ID exists, update it. Otherwise create it as public: false.
           if gist_id:
               url = f"https://api.github.com/gists/{gist_id}"
               req = urllib.request.Request(url, data=payload, headers=headers, method="PATCH")
@@ -74,7 +83,7 @@ jobs:
           else:
               url = "https://api.github.com/gists"
               create_payload = json.dumps({
-                  "description": "Mihomo Smart Routing Config (100% Private)",
+                  "description": "Aegis — Smart Routing & Multi-Subscription Merger (100% Private)",
                   "public": False,
                   "files": {
                       "config.yaml": {
@@ -89,18 +98,18 @@ jobs:
               with urllib.request.urlopen(req) as resp:
                   res = json.loads(resp.read().decode())
                   final_id = res["id"]
+                  print(f"::add-mask::{final_id}", flush=True)
                   print(f"[OK] Successfully {action_name} Secret Gist!")
-                  print(f"::add-mask::{final_id}")
           except Exception as e:
-              print(f"[ERROR] Failed to update/create Gist: {e}")
+              print("[ERROR] Failed to update/create Secret Gist. Please verify GIST_TOKEN scope and GIST_ID.")
               sys.exit(1)
           EOF
 
       - name: Status Report
         run: |
-          echo "### 🔒 Конфигурация успешно синхронизирована с Secret Gist!" >> $GITHUB_STEP_SUMMARY
+          echo "### 🛡️ Aegis: Конфигурация успешно синхронизирована с Secret Gist!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Все ноды обновлены и сохранены в вашем скрытом Secret Gist." >> $GITHUB_STEP_SUMMARY
-          echo "Файл недоступен никому в открытом репозитории, форках или поиске." >> $GITHUB_STEP_SUMMARY
+          echo "Все ноды обновлены и сохранены в вашем скрытом Secret Gist (100% Private)." >> $GITHUB_STEP_SUMMARY
+          echo "Файл недоступен никому в открытом репозитории, ветках или поисковиках." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "⏱️ **Следующее автообновление:** ровно через 1 час." >> $GITHUB_STEP_SUMMARY

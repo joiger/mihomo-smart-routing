@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Mihomo (Clash.Meta) Smart Routing & Multi-Subscription Merger
+Aegis — Smart Routing & Multi-Subscription Merger
 Merges multiple VPN subscriptions (supporting HWID & Anti-Bot cookies) into a single,
 clean Mihomo config with smart routing for AI, Media, Discord, Games, and Russian services.
 """
@@ -9,14 +9,34 @@ import os
 import sys
 import json
 import base64
-import subprocess
+import http.cookiejar
 import urllib.parse
-import urllib.request
+import concurrent.futures
+import requests
 import yaml
 
 class NoAliasDumper(yaml.SafeDumper):
     def ignore_aliases(self, data):
         return True
+
+def _mask_token_in_ci(val):
+    if not val:
+        return
+    val_str = str(val).strip()
+    if os.getenv("GITHUB_ACTIONS") == "true" and len(val_str) > 4:
+        print(f"::add-mask::{val_str}", flush=True)
+
+def _mask_proxies_in_ci(proxies):
+    if os.getenv("GITHUB_ACTIONS") == "true":
+        for p in proxies:
+            if not isinstance(p, dict):
+                continue
+            uuid = p.get("uuid")
+            if uuid:
+                _mask_token_in_ci(uuid)
+            pwd = p.get("password")
+            if pwd:
+                _mask_token_in_ci(pwd)
 
 def parse_vless_uri(uri, prefix=""):
     if not uri.startswith("vless://"):
@@ -105,32 +125,64 @@ def parse_vless_uri(uri, prefix=""):
 
 def fetch_subscription(sub_config):
     name = sub_config.get("name", "VPN")
-    url = sub_config.get("url")
-    headers = sub_config.get("headers", {})
+    url = sub_config.get("url", "")
+    headers = dict(sub_config.get("headers", {}))
     use_cookies = sub_config.get("use_cookies", False)
     
+    if not url:
+        print(f"  [!] Missing URL for provider '{name}'.")
+        return []
+
+    _mask_token_in_ci(url)
     print(f"[*] Fetching '{name}'...")
-    
-    # Use curl with platform detection for TLS renegotiation and cookie compatibility
-    curl_bin = "curl.exe" if sys.platform == "win32" else "curl"
-    cmd = [curl_bin, "-s", "-L", "--max-time", "15"]
-    
+
+    if "User-Agent" not in headers:
+        headers["User-Agent"] = "Clash-verge/1.7.7"
+
+    session = requests.Session()
+    cookie_file = f"{name}_cookies.txt"
+    jar = None
     if use_cookies:
-        cookie_file = f"{name}_cookies.txt"
-        cmd.extend(["-b", cookie_file, "-c", cookie_file])
-        
-    for h_key, h_val in headers.items():
-        cmd.extend(["-H", f"{h_key}: {h_val}"])
-        
-    cmd.append(url)
-    
-    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if res.returncode != 0 or not res.stdout:
-        print(f"  [!] Retrying fetch for '{name}'...")
-        res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
-    raw = res.stdout.strip()
-    
+        try:
+            jar = http.cookiejar.MozillaCookieJar(cookie_file)
+            if os.path.exists(cookie_file):
+                jar.load(ignore_discard=True, ignore_expires=True)
+            session.cookies = jar
+        except Exception as e:
+            print(f"  [!] Note: Could not load cookie file '{cookie_file}': {e}")
+
+    # Enforce strict TLS validation on outbound requests (prevent MitM attacks)
+    try:
+        resp = session.get(
+            url,
+            headers=headers,
+            timeout=15,
+            verify=True,
+            allow_redirects=True
+        )
+        resp.raise_for_status()
+    except requests.exceptions.SSLError as e:
+        print(f"  [!] TLS verification FAILED for '{name}' (possible MitM or invalid cert): {e}")
+        raise
+    except Exception as e:
+        print(f"  [!] Retrying fetch for '{name}' due to error: {e}")
+        resp = session.get(
+            url,
+            headers=headers,
+            timeout=15,
+            verify=True,
+            allow_redirects=True
+        )
+        resp.raise_for_status()
+
+    if use_cookies and jar is not None:
+        try:
+            jar.save(ignore_discard=True, ignore_expires=True)
+        except Exception:
+            pass
+
+    raw = resp.content.strip()
+
     # Try YAML first (if subscription returns clash config directly)
     try:
         data = yaml.safe_load(raw.decode("utf-8", errors="ignore"))
@@ -139,16 +191,17 @@ def fetch_subscription(sub_config):
             for p in proxies:
                 p["name"] = f"[{name}] {p['name']}"
             print(f"  -> Got {len(proxies)} proxies (YAML) from '{name}'")
+            _mask_proxies_in_ci(proxies)
             return proxies
     except Exception:
         pass
-        
+
     # Try Base64 of VLESS/VMess URIs
     try:
         decoded = base64.b64decode(raw).decode("utf-8", errors="ignore")
     except Exception:
         decoded = raw.decode("utf-8", errors="ignore")
-        
+
     proxies = []
     for line in decoded.splitlines():
         line = line.strip()
@@ -156,7 +209,7 @@ def fetch_subscription(sub_config):
             p = parse_vless_uri(line, prefix=name)
             if p:
                 proxies.append(p)
-                
+
     if not proxies and headers.get("User-Agent") != "Hiddify/2.0.5":
         print(f"  [i] 0 proxies found with default UA. Retrying '{name}' with Hiddify UA...")
         sub_retry = dict(sub_config)
@@ -165,198 +218,221 @@ def fetch_subscription(sub_config):
         return fetch_subscription(sub_retry)
 
     print(f"  -> Got {len(proxies)} proxies (URIs) from '{name}'")
+    _mask_proxies_in_ci(proxies)
     return proxies
 
-def main():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, "config.json")
-    user_config = {}
-    subs = []
-    
-    # 1. Check SUBSCRIPTIONS environment variable (ideal for GitHub Actions / Docker)
-    env_subs = os.getenv("SUBSCRIPTIONS", "").strip()
-    if env_subs:
-        print("[*] Detected SUBSCRIPTIONS environment variable.")
-        # Try JSON first
-        if env_subs.startswith("{") or env_subs.startswith("["):
-            try:
-                parsed = json.loads(env_subs)
-                if isinstance(parsed, dict):
-                    user_config = parsed
-                    subs = user_config.get("subscriptions", [])
-                elif isinstance(parsed, list):
-                    subs = [{"name": f"Sub-{i+1}", "url": u} if isinstance(u, str) else u for i, u in enumerate(parsed)]
-            except Exception:
-                pass
-                
-        # Parse line by line
-        if not subs:
-            for idx, line in enumerate(env_subs.splitlines(), start=1):
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                name = ""
-                url = line
-                if "=" in line:
-                    name, url = [x.strip() for x in line.split("=", 1)]
-                elif "|" in line:
-                    name, url = [x.strip() for x in line.split("|", 1)]
-                
-                if not name:
-                    try:
-                        netloc = urllib.parse.urlparse(url).netloc
-                        name = netloc.split(":")[0] or f"Sub-{idx}"
-                    except Exception:
-                        name = f"Sub-{idx}"
-                        
-                subs.append({
-                    "name": name,
-                    "url": url,
-                    "headers": {
-                        "User-Agent": "Clash-verge/1.7.7",
-                        "x-hwid": "e60058b76ce8305c486e9e421a91cfc2"
-                    },
-                    "use_cookies": True
-                })
-    
-    # 2. If no env variable, load config.json
+def fetch_all_subscriptions(subs, timeout=15):
+    """
+    Fetches subscriptions concurrently using ThreadPoolExecutor within a total timeout.
+    Provides zero-downtime resilience: single provider failures do not abort execution.
+    """
     if not subs:
-        if not os.path.exists(config_path):
-            print(f"[!] config.json not found in {script_dir}!")
-            print("    Please copy config.example.json to config.json or set SUBSCRIPTIONS env variable.")
-            return 1
-            
-        with open(config_path, "r", encoding="utf-8") as f:
-            user_config = json.load(f)
-        subs = user_config.get("subscriptions", [])
-        
-    if not subs:
-        print("[!] No subscriptions defined. Aborting.")
-        return 1
-        
+        return []
+
     all_proxies = []
-    for sub in subs:
-        try:
-            proxies = fetch_subscription(sub)
-            all_proxies.extend(proxies)
-        except Exception as e:
-            print(f"  [!] Failed to fetch {sub.get('name')}: {e}")
-            
-    if not all_proxies:
-        print("[ERROR] No proxies could be extracted. Aborting.")
-        return 1
+    max_workers = min(len(subs), 10)
+    print(f"[*] Concurrently fetching {len(subs)} subscription(s) (workers: {max_workers}, timeout: {timeout}s)...")
 
-    # Filter out auto-select pseudo-nodes, stubs, and pure Russian nodes
-    def is_junk_or_auto(p):
-        name = p.get("name", "").lower()
-        server = str(p.get("server", "")).lower()
-        
-        # 1. Fake servers
-        if server in ["127.0.0.1", "0.0.0.0", "localhost"]:
-            return True
-            
-        # 2. Auto-select pseudo nodes
-        auto_keywords = [
-            "автовыбор", "авто-выбор", "auto-select", "autoselect", 
-            "bestping", "best-ping", "balance", "loadbalance", "load-balance"
-        ]
-        if any(k in name for k in auto_keywords):
-            return True
-            
-        # 3. Informational / maintenance / service stubs
-        stub_keywords = [
-            "тех. работах", "техработах", "maintenance", "остаток", "трафик", "traffic",
-            "истека", "expire", "информация", "подписка", "только tg бот", "tg бот",
-            "купить", "новости", "news", "update"
-        ]
-        if any(k in name for k in stub_keywords):
-            return True
-            
-        # 4. Pure Russian nodes (waste ping / blocked destinations)
-        # Exclude relay chains that exit outside RU (e.g. 'москва → германия')
-        is_relay = "→" in name or "->" in name
-        if not is_relay:
-            if "🇷🇺" in p.get("name", ""):
-                return True
-            if any(k in name for k in ["россия", "russia"]):
-                return True
-            if "lte | все операторы" in name:
-                return True
-                
-        return False
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_sub = {executor.submit(fetch_subscription, sub): sub for sub in subs}
+        done, not_done = concurrent.futures.wait(future_to_sub.keys(), timeout=timeout)
 
-    clean_proxies = []
-    dropped_count = 0
-    for p in all_proxies:
-        if is_junk_or_auto(p):
-            dropped_count += 1
-        else:
-            clean_proxies.append(p)
-            
-    print(f"[*] Filtered out {dropped_count} junk/auto/RU nodes. Remaining active: {len(clean_proxies)}")
+        for future in not_done:
+            sub = future_to_sub[future]
+            sub_name = sub.get("name", "Unknown")
+            print(f"  [!] Warning: Provider '{sub_name}' exceeded total timeout of {timeout}s. Skipping.")
+            future.cancel()
+
+        for future in done:
+            sub = future_to_sub[future]
+            sub_name = sub.get("name", "Unknown")
+            try:
+                proxies = future.result()
+                if proxies:
+                    all_proxies.extend(proxies)
+                else:
+                    print(f"  [!] Warning: Provider '{sub_name}' returned 0 proxies.")
+            except Exception as e:
+                print(f"  [!] Warning: Provider '{sub_name}' failed to fetch ({type(e).__name__}: {e}). Continuing with remaining providers.")
+
+    return all_proxies
+
+def is_junk_or_auto(p):
+    name = p.get("name", "").lower()
+    server = str(p.get("server", "")).lower()
+    
+    # 1. Fake servers
+    if server in ["127.0.0.1", "0.0.0.0", "localhost"]:
+        return True
         
-    # Deduplicate proxy names
-    seen = set()
+    # 2. Auto-select pseudo nodes
+    auto_keywords = [
+        "автовыбор", "авто-выбор", "auto-select", "autoselect", 
+        "bestping", "best-ping", "balance", "loadbalance", "load-balance"
+    ]
+    if any(k in name for k in auto_keywords):
+        return True
+        
+    # 3. Informational / maintenance / service stubs
+    stub_keywords = [
+        "тех. работах", "техработах", "maintenance", "остаток", "трафик", "traffic",
+        "истека", "expire", "информация", "подписка", "только tg бот", "tg бот",
+        "купить", "новости", "news", "update"
+    ]
+    if any(k in name for k in stub_keywords):
+        return True
+        
+    # 4. Pure Russian nodes (waste ping / blocked destinations)
+    # Exclude relay chains that exit outside RU (e.g. 'москва → германия')
+    is_relay = "→" in name or "->" in name
+    if not is_relay:
+        if "🇷🇺" in p.get("name", ""):
+            return True
+        if any(k in name for k in ["россия", "russia"]):
+            return True
+        if "lte | все операторы" in name:
+            return True
+            
+    return False
+
+def get_proxy_fingerprint(p):
+    """
+    Generates a unique fingerprint tuple (server, port, uuid) for proxy deduplication.
+    """
+    server = str(p.get("server", "")).strip().lower()
+    port = str(p.get("port", "")).strip()
+    uuid = str(p.get("uuid", "") or p.get("password", "")).strip().lower()
+    if server and port and uuid:
+        return (server, port, uuid)
+    elif server and port:
+        return (server, port, "")
+    return None
+
+def deduplicate_proxies(proxies):
+    """
+    Deduplicates proxies based on (server, port, uuid) fingerprint,
+    then ensures unique proxy names for Mihomo/Clash compatibility.
+    """
+    deduped = []
+    seen_fingerprints = set()
+    dup_count = 0
+
+    for p in proxies:
+        fp = get_proxy_fingerprint(p)
+        if fp:
+            if fp in seen_fingerprints:
+                dup_count += 1
+                continue
+            seen_fingerprints.add(fp)
+        deduped.append(p)
+
+    if dup_count > 0:
+        print(f"[*] Fingerprint deduplication: removed {dup_count} duplicate proxies.")
+
+    # Ensure unique names
+    seen_names = set()
     unique_proxies = []
-    for p in clean_proxies:
+    for p in deduped:
         name = p["name"]
         counter = 1
         orig_name = name
-        while name in seen:
+        while name in seen_names:
             counter += 1
             name = f"{orig_name} #{counter}"
         p["name"] = name
-        seen.add(name)
+        seen_names.add(name)
         unique_proxies.append(p)
-        
-    proxy_names = [p["name"] for p in unique_proxies]
-    print(f"[INFO] Total active unique proxies assembled: {len(unique_proxies)}")
-    
-    # Priority sorting for general Fallback (Finland & Sweden first, then Relays/DPI bypasses, then Central EU, etc.)
-    def fallback_priority(name):
-        n = name.lower()
-        # Tier 1: Finland & Sweden (lowest physical ping, closest geography ~30-50ms)
-        if any(k in n for k in ["🇫🇮", "финлянди", "finland", "🇸🇪", "швеци", "sweden"]):
-            return 1
-        # Tier 2: Relay bridges & DPI bypasses (Instant failover for Mobile LTE under TSPU / white-lists)
-        if any(k in n for k in ["→", "->", "обход"]):
-            return 2
-        # Tier 3: Core Near-EU (Germany, Netherlands, Estonia, Poland, Latvia, Lithuania)
-        if any(k in n for k in ["🇩🇪", "германи", "germany", "🇳🇱", "нидерланд", "netherlands", "🇪🇪", "эстони", "estonia", "🇵🇱", "польш", "poland", "🇱🇻", "латви", "latvia", "🇱🇹", "литв", "lithuania"]):
-            return 3
-        # Tier 4: Other Europe / Regional (UK, France, Czechia, Turkey, Kazakhstan)
-        if any(k in n for k in ["🇬🇧", "united kingdom", "великобритан", "🇫🇷", "франци", "france", "🇨🇿", "чехи", "czechia", "🇹🇷", "турци", "türkiye", "turkey", "🇰🇿", "казахстан", "kazakhstan"]):
-            return 4
-        # Tier 5: USA / Americas
-        if any(k in n for k in ["🇺🇸", "сша", "usa", "united states"]):
-            return 5
-        return 6
 
+    return unique_proxies
+
+def is_relay_or_bypass(n):
+    return any(k in n for k in ["→", "->", "обход", "bypass", "relay"])
+
+def fallback_priority(name):
+    """
+    Priority sorting for Fallback pool:
+    Tier 1: Finland 🇫🇮 & Sweden 🇸🇪 (lowest physical latency ~30–45 ms).
+    Tier 2: Transit bridges ('Москва → EU') and DPI bypass nodes ('Обход') for mobile LTE TSPU survival.
+    Tier 3: Germany 🇩🇪, Netherlands 🇳🇱, Estonia 🇪🇪, Poland 🇵🇱 (also Latvia, Lithuania).
+    Tier 4: Rest of Europe / regional (UK, France, Czechia, Turkey, Kazakhstan, Austria, Switzerland, Italy, Spain).
+    Tier 5: USA 🇺🇸 and distant destinations.
+    Tier 6: Other / unknown.
+    """
+    n = name.lower()
+    is_relay = is_relay_or_bypass(n)
+
+    # Tier 1: Finland & Sweden direct (lowest physical latency ~30–45 ms)
+    if not is_relay and any(k in n for k in ["🇫🇮", "финлянди", "finland", "🇸🇪", "швеци", "sweden"]):
+        return 1
+
+    # Tier 2: Transit bridges & DPI bypasses (Instant failover for Mobile LTE under TSPU / white-lists)
+    if is_relay:
+        return 2
+
+    # Tier 3: Core Near-EU (Germany, Netherlands, Estonia, Poland, Latvia, Lithuania)
+    if any(k in n for k in [
+        "🇩🇪", "германи", "germany", "frankfurt", "франкфурт",
+        "🇳🇱", "нидерланд", "netherlands", "holland", "амстердам", "amsterdam",
+        "🇪🇪", "эстони", "estonia", "таллин", "tallinn",
+        "🇵🇱", "польш", "poland", "варшав", "warsaw",
+        "🇱🇻", "латви", "latvia", "рига", "riga",
+        "🇱🇹", "литв", "lithuania", "вильнюс", "vilnius"
+    ]):
+        return 3
+
+    # Tier 4: Other Europe / Regional (UK, France, Czechia, Turkey, Kazakhstan, Austria, Switzerland, Italy, Spain)
+    if any(k in n for k in [
+        "🇬🇧", "united kingdom", "великобритан", "англия", "лондон", "london", "uk",
+        "🇫🇷", "франци", "france", "париж", "paris",
+        "🇨🇿", "чехи", "czechia", "czech", "прага", "prague",
+        "🇹🇷", "турци", "türkiye", "turkey", "стамбул", "istanbul",
+        "🇰🇿", "казахстан", "kazakhstan", "алматы", "almaty", "астана", "astana",
+        "🇦🇹", "австри", "austria", "вена", "vienna",
+        "🇨🇭", "швейцари", "switzerland", "цюрих", "zurich",
+        "🇮🇹", "итали", "italy", "рим", "milan", "милан",
+        "🇪🇸", "испани", "spain", "мадрид", "madrid"
+    ]):
+        return 4
+
+    # Tier 5: USA / Americas
+    if any(k in n for k in ["🇺🇸", "сша", "usa", "united states", "america"]):
+        return 5
+
+    return 6
+
+def ai_priority(name):
+    """
+    Priority sorting for AI Services (US, DE, NL, UK, SE, FI).
+    """
+    n = name.lower()
+    if any(c in n for c in ["сша", "usa", "united states", "america"]):
+        return 1
+    if any(c in n for c in ["германия", "germany", "нидерланды", "netherlands", "великобритания", "united kingdom", "uk"]):
+        return 2
+    if any(c in n for c in ["швеция", "финляндия", "sweden", "finland"]):
+        return 3
+    if any(c in n for c in ["moscow", "🇷🇺", "россия", "russia"]):
+        return 99
+    return 10
+
+def build_mihomo_config(unique_proxies, user_options=None):
+    if user_options is None:
+        user_options = {}
+
+    proxy_names = [p["name"] for p in unique_proxies]
     fallback_proxies = sorted(proxy_names, key=fallback_priority)
 
     # Dedicated list for Mobile LTE / DPI bypass (Relays & Bypasses first)
-    relays_and_bypasses = [p for p in fallback_proxies if any(k in p.lower() for k in ["→", "->", "обход"])]
-    mobile_proxies = relays_and_bypasses + [p for p in fallback_proxies if p not in relays_and_bypasses] if relays_and_bypasses else fallback_proxies
+    relays_and_bypasses = [p for p in fallback_proxies if is_relay_or_bypass(p.lower())]
+    mobile_proxies = (relays_and_bypasses + [p for p in fallback_proxies if p not in relays_and_bypasses]) if relays_and_bypasses else fallback_proxies
 
-    # Priority sorting for AI Services (US, DE, NL, UK, SE, FI)
-    def ai_priority(name):
-        n = name.lower()
-        if any(c in n for c in ["сша", "usa", "united states"]):
-            return 1
-        if any(c in n for c in ["германия", "germany", "нидерланды", "netherlands", "великобритания", "united kingdom"]):
-            return 2
-        if any(c in n for c in ["швеция", "финляндия", "sweden", "finland"]):
-            return 3
-        if any(c in n for c in ["moscow", "🇷🇺", "россия", "russia"]):
-            return 99
-        return 10
-
+    # Priority sorting for AI Services
     ai_proxies = sorted([p for p in proxy_names if ai_priority(p) < 90], key=ai_priority)
     if not ai_proxies:
         ai_proxies = fallback_proxies
 
-    opts = user_config.get("options", {})
-    
+    opts = user_options
+
     final_config = {
         "mixed-port": opts.get("mixed_port", 7890),
         "socks-port": opts.get("socks_port", 7891),
@@ -582,7 +658,7 @@ def main():
             "DOMAIN-SUFFIX,battle.net,🎯 Games",
             "DOMAIN-SUFFIX,blizzard.com,🎯 Games",
             
-            # 4. Telegram
+            # 3. Telegram
             "GEOSITE,telegram,✈️ Telegram",
             "DOMAIN-SUFFIX,t.me,✈️ Telegram",
             "DOMAIN-SUFFIX,telegram.org,✈️ Telegram",
@@ -599,7 +675,7 @@ def main():
             "IP-CIDR,149.154.160.0/20,✈️ Telegram,no-resolve",
             "IP-CIDR,185.76.151.0/24,✈️ Telegram,no-resolve",
             
-            # 5. Discord
+            # 4. Discord
             "GEOSITE,discord,💬 Discord",
             "DOMAIN-SUFFIX,discord.com,💬 Discord",
             "DOMAIN-SUFFIX,discord.gg,💬 Discord",
@@ -607,7 +683,7 @@ def main():
             "DOMAIN-SUFFIX,discordapp.com,💬 Discord",
             "DOMAIN-SUFFIX,discordapp.net,💬 Discord",
             
-            # 6. Media & Streaming
+            # 5. Media & Streaming
             "DOMAIN-SUFFIX,googlevideo.com,🎬 Media-Streaming",
             "DOMAIN-SUFFIX,youtube.com,🎬 Media-Streaming",
             "DOMAIN-SUFFIX,ytimg.com,🎬 Media-Streaming",
@@ -615,7 +691,7 @@ def main():
             "DOMAIN-SUFFIX,soundcloud.com,🎬 Media-Streaming",
             "DOMAIN-SUFFIX,sndcdn.com,🎬 Media-Streaming",
             
-            # 5. AI Services & Google Ecosystem
+            # 6. AI Services & Google Ecosystem
             "DOMAIN-SUFFIX,gemini.google.com,🤖 AI-Services",
             "DOMAIN-SUFFIX,generativelanguage.googleapis.com,🤖 AI-Services",
             "DOMAIN-SUFFIX,aistudio.google.com,🤖 AI-Services",
@@ -635,7 +711,7 @@ def main():
             "GEOSITE,openai,🤖 AI-Services",
             "GEOSITE,anthropic,🤖 AI-Services",
             
-            # 6. Russian Services (Direct)
+            # 7. Russian Services (Direct)
             "DOMAIN-SUFFIX,ru,DIRECT",
             "DOMAIN-SUFFIX,su,DIRECT",
             "DOMAIN-SUFFIX,xn--p1ai,DIRECT",
@@ -646,10 +722,103 @@ def main():
             "DOMAIN-SUFFIX,gosuslugi.ru,DIRECT",
             "GEOIP,RU,DIRECT",
             
-            # 7. Match All Other
+            # 8. Match All Other
             "MATCH,PROXY"
         ]
     }
+    return final_config
+
+def main():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(script_dir, "config.json")
+    user_config = {}
+    subs = []
+    
+    # 1. Check SUBSCRIPTIONS environment variable (ideal for GitHub Actions / Docker)
+    env_subs = os.getenv("SUBSCRIPTIONS", "").strip()
+    if env_subs:
+        print("[*] Detected SUBSCRIPTIONS environment variable.")
+        # Try JSON first
+        if env_subs.startswith("{") or env_subs.startswith("["):
+            try:
+                parsed = json.loads(env_subs)
+                if isinstance(parsed, dict):
+                    user_config = parsed
+                    subs = user_config.get("subscriptions", [])
+                elif isinstance(parsed, list):
+                    subs = [{"name": f"Sub-{i+1}", "url": u} if isinstance(u, str) else u for i, u in enumerate(parsed)]
+            except Exception:
+                pass
+                
+        # Parse line by line
+        if not subs:
+            for idx, line in enumerate(env_subs.splitlines(), start=1):
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                name = ""
+                url = line
+                if "=" in line:
+                    name, url = [x.strip() for x in line.split("=", 1)]
+                elif "|" in line:
+                    name, url = [x.strip() for x in line.split("|", 1)]
+                
+                if not name:
+                    try:
+                        netloc = urllib.parse.urlparse(url).netloc
+                        name = netloc.split(":")[0] or f"Sub-{idx}"
+                    except Exception:
+                        name = f"Sub-{idx}"
+                        
+                subs.append({
+                    "name": name,
+                    "url": url,
+                    "headers": {
+                        "User-Agent": "Clash-verge/1.7.7",
+                        "x-hwid": "e60058b76ce8305c486e9e421a91cfc2"
+                    },
+                    "use_cookies": True
+                })
+    
+    # 2. If no env variable, load config.json
+    if not subs:
+        if not os.path.exists(config_path):
+            print(f"[!] config.json not found in {script_dir}!")
+            print("    Please copy config.example.json to config.json or set SUBSCRIPTIONS env variable.")
+            return 1
+            
+        with open(config_path, "r", encoding="utf-8") as f:
+            user_config = json.load(f)
+        subs = user_config.get("subscriptions", [])
+        
+    if not subs:
+        print("[!] No subscriptions defined. Aborting.")
+        return 1
+
+    # High-Performance Parallel Fetch across providers with 15-second total timeout
+    all_proxies = fetch_all_subscriptions(subs, timeout=15)
+            
+    if not all_proxies:
+        print("[ERROR] No proxies could be extracted from any provider. Aborting.")
+        return 1
+
+    # Filter out auto-select pseudo-nodes, stubs, and pure Russian nodes
+    clean_proxies = []
+    dropped_count = 0
+    for p in all_proxies:
+        if is_junk_or_auto(p):
+            dropped_count += 1
+        else:
+            clean_proxies.append(p)
+            
+    print(f"[*] Filtered out {dropped_count} junk/auto/RU nodes. Remaining active: {len(clean_proxies)}")
+        
+    # Deduplicate proxies by (server, port, uuid) fingerprint and ensure unique names
+    unique_proxies = deduplicate_proxies(clean_proxies)
+    print(f"[INFO] Total active unique proxies assembled: {len(unique_proxies)}")
+
+    opts = user_config.get("options", {})
+    final_config = build_mihomo_config(unique_proxies, user_options=opts)
     
     env_out = os.getenv("OUTPUT_FILE", "").strip()
     if env_out:
@@ -659,13 +828,15 @@ def main():
         
     for out in out_files:
         expanded = os.path.expanduser(os.path.expandvars(out))
-        os.makedirs(os.path.dirname(os.path.abspath(expanded)), exist_ok=True)
+        out_dir = os.path.dirname(os.path.abspath(expanded))
+        if out_dir:
+            os.makedirs(out_dir, exist_ok=True)
         print(f"[INFO] Writing config to: {expanded}")
         with open(expanded, "w", encoding="utf-8") as f:
             yaml.dump(final_config, f, Dumper=NoAliasDumper, allow_unicode=True, sort_keys=False, default_flow_style=False, indent=2)
             
     print("\n" + "="*50)
-    print(f"SUCCESS: Synced {len(subs)} subscriptions! Total proxies: {len(unique_proxies)}")
+    print(f"SUCCESS: Aegis synced {len(subs)} subscriptions! Total proxies: {len(unique_proxies)}")
     print("="*50)
     return 0
 
@@ -673,13 +844,13 @@ if __name__ == "__main__":
     import argparse
     import time
     
-    parser = argparse.ArgumentParser(description="Mihomo Smart Routing & Multi-Subscription Merger")
+    parser = argparse.ArgumentParser(description="Aegis — Smart Routing & Multi-Subscription Merger")
     parser.add_argument("--interval", type=float, default=0, help="Run repeatedly every N hours (e.g. --interval 1 for hourly sync)")
     args = parser.parse_args()
 
     if args.interval > 0:
         interval_secs = int(args.interval * 3600)
-        print(f"[*] Starting auto-sync daemon (every {args.interval} hour(s))...")
+        print(f"[*] Starting Aegis auto-sync daemon (every {args.interval} hour(s))...")
         while True:
             try:
                 main()

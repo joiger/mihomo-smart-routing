@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
-title Mihomo Smart Routing Updater
+title Aegis — Smart Routing & Multi-Subscription Merger
 echo ========================================================
-echo   Updating VPN Subscriptions...
+echo   Aegis: Updating VPN Subscriptions...
 echo ========================================================
 echo.
 python "%~dp0sync.py"

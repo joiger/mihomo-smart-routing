@@ -1,0 +1,14 @@
+#!/bin/sh
+# Aegis Pre-Commit Hook
+# Scans git diff for sensitive personal domains, tokens, and credentials before committing.
+
+echo "[*] Pre-commit hook: Scanning for sensitive leaks..."
+python scripts/check_diff.py
+RESULT=$?
+
+if [ $RESULT -ne 0 ]; then
+    echo "[!] Commit aborted by Aegis security scanner."
+    exit 1
+fi
+
+exit 0
