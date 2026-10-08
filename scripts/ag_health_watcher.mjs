@@ -195,8 +195,8 @@ async function parseHealth() {
     currentStatus = {
       state: 'red',
       knobColor: '#ef4444',
-      knobBloom: '0 0 6px rgba(239, 68, 68, 0.95), 0 0 11px rgba(239, 68, 68, 0.5)',
-      trackBg: 'rgba(239, 68, 68, 0.35)',
+      knobBloom: '0 0 8px rgba(239, 68, 68, 0.95), 0 0 16px rgba(239, 68, 68, 0.6)',
+      trackBg: 'rgba(239, 68, 68, 0.3)',
       tooltip: isOffline
         ? 'Antigravity AI: 🔴 Прокси недоступен! Идёт самоисцеление...'
         : 'Antigravity AI: 🔴 Гео-блок Google 400! Идёт самоисцеление...',
@@ -211,20 +211,20 @@ async function parseHealth() {
     currentStatus = {
       state: 'yellow',
       knobColor: '#f59e0b',
-      knobBloom: '0 0 6px rgba(245, 158, 11, 0.9), 0 0 10px rgba(245, 158, 11, 0.45)',
-      trackBg: 'rgba(245, 158, 11, 0.28)',
+      knobBloom: '0 0 8px rgba(245, 158, 11, 0.95), 0 0 15px rgba(245, 158, 11, 0.5)',
+      trackBg: 'rgba(245, 158, 11, 0.25)',
       tooltip: `Antigravity AI: 🟡 Ожидание ответа... (~${ping}мс)`,
       ping,
       route,
       diagnosis: null
     };
   } else {
-    // Штатный режим: чистый белый кружочек, не выбивается из темы Antigravity!
+    // Штатный режим: чистый белый кружочек с аккуратным ореолом
     currentStatus = {
       state: 'ok',
       knobColor: '#ffffff',
-      knobBloom: '0 1px 3px rgba(0,0,0,0.35)',
-      trackBg: 'rgba(255, 255, 255, 0.2)',
+      knobBloom: '0 0 6px rgba(255, 255, 255, 0.8), 0 1px 3px rgba(0, 0, 0, 0.6)',
+      trackBg: 'rgba(0, 0, 0, 0.55)',
       tooltip: `Antigravity AI: 🟢 Онлайн (${route}) · ${ping}мс`,
       ping,
       route,
@@ -250,6 +250,167 @@ function updateDOM(ws) {
       const legacyTip = document.getElementById('ag-health-tooltip');
       if (legacyTip) legacyTip.remove();
 
+      // 1. Autonomous Self-Healing & Auto-Retry Loop (Runs independently of prompt bar)
+      if (!window._agAutoRetrySetup) {
+        window._agAutoRetrySetup = true;
+        window._agRetryCount = 0;
+        window._agLastRetryTime = 0;
+        window._agRetrying = false;
+        const MAX_RETRIES = 50;
+
+        function findRetryTarget() {
+          if (window._agRetrying) return null;
+
+          // 1. Check all buttons for retry / try again
+          const allButtons = Array.from(document.querySelectorAll('button'));
+          for (const b of allButtons) {
+            if (b.id && (b.id.startsWith('ag-toggle') || b.id === 'ag-fix-action-btn')) continue;
+            if (b.disabled || b.getAttribute('aria-disabled') === 'true') continue;
+
+            const text = (b.textContent || '').trim().toLowerCase();
+            const aria = (b.getAttribute('aria-label') || '').trim().toLowerCase();
+            const title = (b.getAttribute('title') || '').trim().toLowerCase();
+
+            if (text === 'retry' || text === 'try again' || text === 'повторить' || 
+                text === 'повторить попытку' || text === 'regenerate' || text === 'перезапустить') {
+              return { element: b, text: b.textContent.trim() };
+            }
+            if (aria === 'retry' || aria === 'try again' || aria === 'повторить' || 
+                title === 'retry' || title === 'try again') {
+              return { element: b, text: aria || title };
+            }
+          }
+
+          // 2. Button in error cards / banners
+          for (const b of allButtons) {
+            if (b.id && b.id.startsWith('ag-')) continue;
+            if (b.disabled) continue;
+            const text = (b.textContent || '').trim().toLowerCase();
+            if (text.includes('retry') || text.includes('повтор') || text.includes('try again')) {
+              const isInsideError = b.closest('[role="alert"], [class*="destructive"], [class*="card"], [class*="error"]');
+              if (isInsideError) {
+                return { element: b, text: b.textContent.trim() };
+              }
+            }
+          }
+
+          // 3. Inline error replay icon in [data-testid="user-input-step"]
+          const userSteps = document.querySelectorAll('[data-testid="user-input-step"]');
+          for (const step of userSteps) {
+            const errorContainers = step.querySelectorAll('.text-secondary-foreground, .text-destructive, [class*="error"], [class*="red"]');
+            for (const ec of errorContainers) {
+              const clickables = ec.querySelectorAll('svg.cursor-pointer, button, [role="button"], span.cursor-pointer');
+              for (const el of clickables) {
+                if (el.id && el.id.startsWith('ag-')) continue;
+                return { element: el, text: 'Inline Replay Icon' };
+              }
+            }
+          }
+
+          // 4. Elements with tooltip pointing to "Retry" / "Try again"
+          const tooltips = Array.from(document.querySelectorAll('[id]')).filter(el => {
+            const t = (el.textContent || '').trim().toLowerCase();
+            return t === 'retry' || t === 'try again' || t === 'повторить' || t === 'повторить попытку';
+          });
+          for (const tt of tooltips) {
+            const trigger = document.querySelector(\`[data-tooltip-id="\${tt.id}"]\`);
+            if (trigger && !trigger.disabled && !trigger.classList.contains('pointer-events-none')) {
+              return { element: trigger, text: 'Tooltip: ' + tt.textContent.trim() };
+            }
+          }
+
+          return null;
+        }
+
+        const checkAndAutoRetry = () => {
+          const isAutoActive = localStorage.getItem('ag_auto_retry_active') !== 'false';
+          if (!isAutoActive) return;
+          if (window._agRetrying) return;
+
+          const target = findRetryTarget();
+          if (target && target.element) {
+            const now = Date.now();
+            if (now - window._agLastRetryTime > 3500) {
+              if (window._agRetryCount < MAX_RETRIES) {
+                window._agLastRetryTime = now;
+                window._agRetryCount++;
+                window._agRetrying = true;
+
+                // Trigger self-healing API in background
+                fetch('http://127.0.0.1:9750/api/fix', { method: 'POST' }).catch(() => {});
+
+                // Informative Toast with count (X/50)
+                let toast = document.getElementById('ag-toast');
+                if (toast) toast.remove();
+                toast = document.createElement('div');
+                toast.id = 'ag-toast';
+                toast.style.cssText = \`
+                  position: fixed;
+                  bottom: 56px;
+                  left: 310px;
+                  background: rgba(24, 24, 27, 0.96);
+                  backdrop-filter: blur(10px);
+                  color: #ffffff;
+                  font-weight: 500;
+                  border: 1px solid rgba(255, 255, 255, 0.15);
+                  border-radius: 8px;
+                  padding: 7px 14px;
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                  font-size: 11px;
+                  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+                  z-index: 999999999;
+                  pointer-events: none;
+                  transition: opacity 0.3s ease;
+                \`;
+                toast.innerText = \`🔄 Обнаружена ошибка: авто-нажатие Retry (\${window._agRetryCount}/\${MAX_RETRIES})...\`;
+                document.body.appendChild(toast);
+
+                setTimeout(() => {
+                  try {
+                    target.element.click();
+                    target.element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                    console.log(\`[Aegis Auto-Retry] Успешно нажат Retry (\${target.text}) [Попытка \${window._agRetryCount}/\${MAX_RETRIES}]\`);
+                  } catch (err) {
+                    console.error('[Aegis Auto-Retry] Ошибка нажатия:', err);
+                  }
+                  setTimeout(() => {
+                    window._agRetrying = false;
+                    if (toast) { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }
+                  }, 2500);
+                }, 1400);
+              } else {
+                // Reached 50 retries cutoff limit
+                let toast = document.getElementById('ag-toast');
+                if (toast) toast.remove();
+                toast = document.createElement('div');
+                toast.id = 'ag-toast';
+                toast.style.cssText = \`
+                  position: fixed;
+                  bottom: 56px;
+                  left: 310px;
+                  background: rgba(239, 68, 68, 0.95);
+                  color: #ffffff;
+                  font-weight: 600;
+                  border-radius: 8px;
+                  padding: 8px 14px;
+                  font-size: 11px;
+                  z-index: 999999999;
+                \`;
+                toast.innerText = '⚠️ Достигнут лимит 50 авто-повторений. Проверьте сеть вручную.';
+                document.body.appendChild(toast);
+              }
+            }
+          } else {
+            // Reset counter when clean for 20 seconds
+            if (Date.now() - window._agLastRetryTime > 20000) {
+              window._agRetryCount = 0;
+            }
+          }
+        };
+
+        setInterval(checkAndAutoRetry, 1000);
+      }
+
       // 2. Locate model selector button
       const btns = Array.from(document.querySelectorAll('button'));
       const modelBtn = btns.find(b => {
@@ -269,48 +430,74 @@ function updateDOM(ws) {
         modelBtn.insertAdjacentElement('afterend', wrapper);
       }
 
-      // 3. Native Antigravity-styled Toggle Capsule with Integrated Indicator Knob
+      // 3. Distinct, High-End Antigravity-styled Capsule with Integrated Switch
       let toggle = document.getElementById('ag-auto-retry-toggle');
-      if (!toggle || toggle.parentElement !== wrapper || !toggle.className.includes('rounded-full')) {
+      if (!toggle || toggle.parentElement !== wrapper || !document.getElementById('ag-toggle-icon')) {
         if (toggle) toggle.remove();
         toggle = document.createElement('div');
         toggle.id = 'ag-auto-retry-toggle';
-        toggle.className = 'flex items-center h-7 gap-1.5 rounded-full px-2 text-xs text-secondary-foreground select-none outline-none hover:bg-secondary transition-colors cursor-pointer';
-        toggle.style.cssText = 'background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08);';
+        toggle.className = 'flex items-center h-7 gap-2 rounded-full px-2.5 text-xs select-none outline-none transition-all cursor-pointer';
+        toggle.style.cssText = \`
+          background: rgba(255, 255, 255, 0.07);
+          backdrop-filter: blur(12px);
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+          transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        \`;
 
         const isEnabled = localStorage.getItem('ag_auto_retry_active') !== 'false';
 
         toggle.innerHTML = \`
+          <span id="ag-toggle-icon" style="display:flex;align-items:center;color:\${isEnabled ? '#60a5fa' : '#71717a'};transition:color 0.2s;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+              <path d="M16 21h5v-5"/>
+            </svg>
+          </span>
           <span id="ag-toggle-label" style="
-            font-size: 11px;
+            font-size: 11.5px;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            font-weight: 500;
-            color: \${isEnabled ? '#e4e4e7' : '#71717a'};
+            font-weight: 600;
+            letter-spacing: 0.2px;
+            color: \${isEnabled ? '#f4f4f5' : '#71717a'};
             transition: color 0.2s;
           ">Auto-retry</span>
           <div id="ag-toggle-track" style="
-            width: 26px;
-            height: 14px;
-            background: \${isEnabled ? status.trackBg : 'rgba(255,255,255,0.1)'};
+            width: 30px;
+            height: 17px;
+            background: \${isEnabled ? status.trackBg : 'rgba(0, 0, 0, 0.45)'};
+            border: 1px solid \${isEnabled ? (status.state === 'red' ? 'rgba(239, 68, 68, 0.6)' : (status.state === 'yellow' ? 'rgba(245, 158, 11, 0.6)' : 'rgba(255, 255, 255, 0.25)')) : 'rgba(255, 255, 255, 0.12)'};
             border-radius: 9999px;
             position: relative;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
             box-sizing: border-box;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.4);
           ">
             <div id="ag-toggle-thumb" style="
-              width: 10px;
-              height: 10px;
-              background: \${isEnabled ? status.knobColor : '#71717a'};
+              width: 13px;
+              height: 13px;
+              background: \${isEnabled ? status.knobColor : '#52525b'};
               box-shadow: \${isEnabled ? status.knobBloom : 'none'};
               border-radius: 50%;
               position: absolute;
-              top: 2px;
-              left: 2px;
-              transform: translateX(\${isEnabled ? '12px' : '0px'});
-              transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s ease, box-shadow 0.25s ease;
+              top: 1px;
+              left: 1px;
+              transform: translateX(\${isEnabled ? '13px' : '0px'});
+              transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.25s ease, box-shadow 0.25s ease;
             "></div>
           </div>
         \`;
+
+        toggle.onmouseenter = () => {
+          toggle.style.background = 'rgba(255, 255, 255, 0.12)';
+          toggle.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+        };
+        toggle.onmouseleave = () => {
+          toggle.style.background = 'rgba(255, 255, 255, 0.07)';
+          toggle.style.borderColor = 'rgba(255, 255, 255, 0.16)';
+        };
 
         toggle.onclick = (e) => {
           e.stopPropagation();
@@ -321,17 +508,22 @@ function updateDOM(ws) {
           const track = document.getElementById('ag-toggle-track');
           const thumb = document.getElementById('ag-toggle-thumb');
           const label = document.getElementById('ag-toggle-label');
+          const icon = document.getElementById('ag-toggle-icon');
 
           if (track) {
-            track.style.background = next ? status.trackBg : 'rgba(255,255,255,0.1)';
+            track.style.background = next ? status.trackBg : 'rgba(0, 0, 0, 0.45)';
+            track.style.borderColor = next ? (status.state === 'red' ? 'rgba(239, 68, 68, 0.6)' : (status.state === 'yellow' ? 'rgba(245, 158, 11, 0.6)' : 'rgba(255, 255, 255, 0.25)')) : 'rgba(255, 255, 255, 0.12)';
           }
           if (thumb) {
-            thumb.style.transform = \`translateX(\${next ? '12px' : '0px'})\`;
-            thumb.style.background = next ? status.knobColor : '#71717a';
+            thumb.style.transform = \`translateX(\${next ? '13px' : '0px'})\`;
+            thumb.style.background = next ? status.knobColor : '#52525b';
             thumb.style.boxShadow = next ? status.knobBloom : 'none';
           }
           if (label) {
-            label.style.color = next ? '#e4e4e7' : '#71717a';
+            label.style.color = next ? '#f4f4f5' : '#71717a';
+          }
+          if (icon) {
+            icon.style.color = next ? '#60a5fa' : '#71717a';
           }
 
           let toast = document.getElementById('ag-toast');
@@ -345,12 +537,12 @@ function updateDOM(ws) {
             background: rgba(24, 24, 27, 0.95);
             backdrop-filter: blur(10px);
             color: #f4f4f5;
-            border: 1px solid rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.14);
             border-radius: 8px;
-            padding: 6px 12px;
+            padding: 7px 14px;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            font-size: 11px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+            font-size: 11.5px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
             z-index: 999999999;
             pointer-events: none;
             transition: opacity 0.3s ease;
@@ -367,12 +559,21 @@ function updateDOM(ws) {
       const isEnabled = localStorage.getItem('ag_auto_retry_active') !== 'false';
       const track = document.getElementById('ag-toggle-track');
       const thumb = document.getElementById('ag-toggle-thumb');
+      const icon = document.getElementById('ag-toggle-icon');
+      const label = document.getElementById('ag-toggle-label');
       if (track && isEnabled) {
         track.style.background = status.trackBg;
+        track.style.borderColor = status.state === 'red' ? 'rgba(239, 68, 68, 0.6)' : (status.state === 'yellow' ? 'rgba(245, 158, 11, 0.6)' : 'rgba(255, 255, 255, 0.25)');
       }
       if (thumb && isEnabled) {
         thumb.style.background = status.knobColor;
         thumb.style.boxShadow = status.knobBloom;
+      }
+      if (icon) {
+        icon.style.color = isEnabled ? '#60a5fa' : '#71717a';
+      }
+      if (label) {
+        label.style.color = isEnabled ? '#f4f4f5' : '#71717a';
       }
       toggle.title = status.tooltip;
 
