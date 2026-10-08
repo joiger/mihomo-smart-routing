@@ -160,24 +160,17 @@ class TestAegisTelemetry(unittest.TestCase):
             ["🤖 Auto-AI-Stable", "Auto-Fallback", "🛡️ Mobile-Bypass", "DIRECT"]
         )
 
-        # 4. Verify fake-ip-filter entries
-        fake_ip_filter = cfg["dns"]["fake-ip-filter"]
-        self.assertIn("cloudcode-pa.googleapis.com", fake_ip_filter)
-        self.assertIn("daily-cloudcode-pa.googleapis.com", fake_ip_filter)
-
-        # 5. Verify Antigravity Unlocker DIRECT bypass rules and order
+        # 4. Verify Antigravity and GitHub Gist rules
         rules = cfg["rules"]
-        self.assertIn("DOMAIN,cloudcode-pa.googleapis.com,DIRECT", rules)
-        self.assertIn("DOMAIN,daily-cloudcode-pa.googleapis.com,DIRECT", rules)
+        self.assertIn("DOMAIN,cloudcode-pa.googleapis.com,🤖 AI-Services", rules)
+        self.assertIn("DOMAIN,daily-cloudcode-pa.googleapis.com,🤖 AI-Services", rules)
+        self.assertIn("DOMAIN,gist.githubusercontent.com,🛡️ Mobile-Bypass", rules)
+        self.assertIn("DOMAIN-SUFFIX,events.data.microsoft.com,REJECT", rules)
         self.assertIn("IP-CIDR,45.155.204.190/32,DIRECT,no-resolve", rules)
         self.assertIn("IP-CIDR,83.220.169.155/32,DIRECT,no-resolve", rules)
 
-        idx_unlocker_domain = rules.index("DOMAIN,cloudcode-pa.googleapis.com,DIRECT")
-        idx_ai_googleapis = rules.index("DOMAIN-SUFFIX,googleapis.com,🤖 AI-Services")
-        self.assertLess(
-            idx_unlocker_domain, idx_ai_googleapis,
-            "Antigravity Unlocker bypass rules must precede general googleapis rules in rules order"
-        )
+        # 5. Verify TUN strict process mode
+        self.assertEqual(cfg["tun"]["find-process-mode"], "strict")
 
         # 6. Edge cases: Empty proxies and non-AI-only proxies
         cfg_empty = build_mihomo_config([])

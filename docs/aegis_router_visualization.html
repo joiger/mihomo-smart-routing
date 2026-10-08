@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Aegis Routing Visualizer</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @keyframes pulse-node {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); }
+      50% { transform: scale(1.03); box-shadow: 0 0 15px 4px rgba(59, 130, 246, 0.4); }
+    }
+    .active-flow {
+      animation: pulse-node 1.5s infinite;
+      border-color: #3b82f6 !important;
+      background-color: rgba(59, 130, 246, 0.08) !important;
+    }
+    .connector-line {
+      transition: all 0.3s ease;
+    }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] p-4 sm:p-6 font-sans select-none antialiased min-h-screen">
+  <div class="max-w-5xl mx-auto space-y-6">
+    
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[var(--border)]">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">🛡️</span>
+          <h1 class="text-xl font-bold tracking-tight">Aegis Smart Router — Интерактивная карта логики</h1>
+        </div>
+        <p class="text-xs text-[var(--muted-foreground)] mt-1">
+          Наглядно: как ваши сетевые пакеты проходят через Fake-IP DNS, правила фильтрации и многоуровневый Fallback
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+          ● FlClash v1.2.0 Clean UI
+        </span>
+      </div>
+    </div>
+
+    <!-- Interactive Tester Bar -->
+    <div class="p-4 rounded-xl bg-[var(--card)] border border-[var(--border)] shadow-sm space-y-3">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+        <label class="text-xs font-semibold text-[var(--foreground)] flex items-center gap-1.5">
+          <span>🔍</span> Интерактивный симулятор пакета: выберите или введите домен
+        </label>
+        <span id="match-status" class="text-xs font-mono text-blue-500 font-semibold bg-blue-500/10 px-2.5 py-0.5 rounded-full border border-blue-500/20">
+          Готов к тестированию
+        </span>
+      </div>
+      
+      <div class="flex flex-wrap gap-2">
+        <button onclick="simulateTraffic('chatgpt.com')" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--sidebar)] hover:bg-blue-500/20 border border-[var(--border)] transition">
+          🤖 chatgpt.com
+        </button>
+        <button onclick="simulateTraffic('claude.ai')" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--sidebar)] hover:bg-blue-500/20 border border-[var(--border)] transition">
+          🧠 claude.ai
+        </button>
+        <button onclick="simulateTraffic('youtube.com')" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--sidebar)] hover:bg-blue-500/20 border border-[var(--border)] transition">
+          🎬 youtube.com
+        </button>
+        <button onclick="simulateTraffic('discord.gg')" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--sidebar)] hover:bg-blue-500/20 border border-[var(--border)] transition">
+          💬 discord.gg
+        </button>
+        <button onclick="simulateTraffic('telegram.org')" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--sidebar)] hover:bg-blue-500/20 border border-[var(--border)] transition">
+          ✈️ telegram.org
+        </button>
+        <button onclick="simulateTraffic('steampowered.com')" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--sidebar)] hover:bg-blue-500/20 border border-[var(--border)] transition">
+          🎯 steam.com
+        </button>
+        <button onclick="simulateTraffic('gosuslugi.ru')" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--sidebar)] hover:bg-blue-500/20 border border-[var(--border)] transition">
+          🇷🇺 gosuslugi.ru
+        </button>
+        <button onclick="simulateTraffic('sberbank.ru')" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--sidebar)] hover:bg-blue-500/20 border border-[var(--border)] transition">
+          🏦 sberbank.ru
+        </button>
+        <button onclick="simulateTraffic('instagram.com')" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--sidebar)] hover:bg-blue-500/20 border border-[var(--border)] transition">
+          🌐 instagram.com
+        </button>
+      </div>
+
+      <div class="flex gap-2">
+        <input id="custom-domain" type="text" placeholder="Введите любой домен (напр: riotgames.com, yandex.ru, bbc.com)..." 
+               class="flex-1 bg-[var(--sidebar)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500">
+        <button onclick="simulateCustomTraffic()" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition">
+          Проверить маршрут ➔
+        </button>
+      </div>
+    </div>
+
+    <!-- Visualization Grid: 4 Columns -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+
+      <!-- Column 1: Client & DNS Layer -->
+      <div class="space-y-3">
+        <div class="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] flex items-center gap-1.5">
+          <span>1️⃣</span> Входной трафик & DNS
+        </div>
+        
+        <div id="step-app" class="p-3.5 rounded-xl bg-[var(--card)] border border-[var(--border)] transition duration-300">
+          <div class="font-semibold text-xs text-[var(--foreground)]">📱 Приложения (Apps)</div>
+          <div class="text-[12px] text-[var(--muted-foreground)] mt-1">
+            Браузер, Игры, Мессенджеры, AI-клиенты
+          </div>
+        </div>
+
+        <div id="step-tun" class="p-3.5 rounded-xl bg-[var(--card)] border border-[var(--border)] transition duration-300">
+          <div class="font-semibold text-xs text-[var(--foreground)]">🔌 TUN & Fake-IP Engine</div>
+          <div class="text-[12px] text-[var(--muted-foreground)] mt-1">
+            Мгновенный Fake-IP: <span class="font-mono text-emerald-500">198.18.0.x</span> без утечек DNS и ожиданий
+          </div>
+          <div class="mt-2 text-[12px] text-[var(--muted-foreground)] bg-[var(--sidebar)] p-1.5 rounded border border-[var(--border)]">
+            ⚡ Строгие маршруты (<span class="font-mono">strict-route</span>) при смене Wi-Fi ↔ LTE
+          </div>
+        </div>
+      </div>
+
+      <!-- Column 2: Rules Evaluation Layer -->
+      <div class="space-y-3">
+        <div class="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] flex items-center gap-1.5">
+          <span>2️⃣</span> Правила роутинга (Сверху вниз)
+        </div>
+
+        <div id="rule-system" class="p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-medium text-[var(--foreground)]">1. Системные & LAN</div>
+          <div class="text-[12px] text-[var(--muted-foreground)]">127.0.0.1, LAN, Android captive</div>
+          <div class="text-[12px] font-mono text-amber-500 font-semibold mt-1">➔ DIRECT</div>
+        </div>
+
+        <div id="rule-games" class="p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-medium text-[var(--foreground)]">2. 🎯 Игры (Steam, Riot, EA)</div>
+          <div class="text-[12px] text-[var(--muted-foreground)]">Пинг 0 мс (DIRECT по умолч.)</div>
+          <div class="text-[12px] font-mono text-purple-400 font-semibold mt-1">➔ 🎯 Games</div>
+        </div>
+
+        <div id="rule-telegram" class="p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-medium text-[var(--foreground)]">3. ✈️ Telegram</div>
+          <div class="text-[12px] text-[var(--muted-foreground)]">t.me, org, IP-диапазоны DC</div>
+          <div class="text-[12px] font-mono text-sky-400 font-semibold mt-1">➔ ✈️ Telegram</div>
+        </div>
+
+        <div id="rule-discord" class="p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-medium text-[var(--foreground)]">4. 💬 Discord</div>
+          <div class="text-[12px] text-[var(--muted-foreground)]">Голос (UDP xudp) и чаты</div>
+          <div class="text-[12px] font-mono text-indigo-400 font-semibold mt-1">➔ 💬 Discord</div>
+        </div>
+
+        <div id="rule-media" class="p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-medium text-[var(--foreground)]">5. 🎬 Media & YouTube</div>
+          <div class="text-[12px] text-[var(--muted-foreground)]">googlevideo, soundcloud</div>
+          <div class="text-[12px] font-mono text-red-400 font-semibold mt-1">➔ 🎬 Media-Streaming</div>
+        </div>
+
+        <div id="rule-ai" class="p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-medium text-[var(--foreground)]">6. 🤖 AI-Services</div>
+          <div class="text-[12px] text-[var(--muted-foreground)]">ChatGPT, Claude, Gemini</div>
+          <div class="text-[12px] font-mono text-emerald-400 font-semibold mt-1">➔ 🤖 AI-Services</div>
+        </div>
+
+        <div id="rule-ru" class="p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-medium text-[var(--foreground)]">7. 🇷🇺 Рунет & Банки</div>
+          <div class="text-[12px] text-[var(--muted-foreground)]">.ru, Сбер, Госуслуги, GEOIP RU</div>
+          <div class="text-[12px] font-mono text-amber-500 font-semibold mt-1">➔ DIRECT (без VPN)</div>
+        </div>
+
+        <div id="rule-match" class="p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-medium text-[var(--foreground)]">8. 🌐 Все остальные сайты</div>
+          <div class="text-[12px] text-[var(--muted-foreground)]">Правило MATCH</div>
+          <div class="text-[12px] font-mono text-blue-400 font-semibold mt-1">➔ PROXY</div>
+        </div>
+      </div>
+
+      <!-- Column 3: Category Selectors & Pinned Connectors -->
+      <div class="space-y-3">
+        <div class="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] flex items-center gap-1.5">
+          <span>3️⃣</span> Группы FlClash
+        </div>
+
+        <div id="group-ai" class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-semibold text-[var(--foreground)]">🤖 AI-Services</div>
+          <div class="mt-1 text-[12px] text-[var(--muted-foreground)]">Закрепленные коннекторы:</div>
+          <div class="flex gap-1 mt-1 flex-wrap font-mono text-[12px]">
+            <span class="bg-blue-500/10 text-blue-500 px-1.5 py-0.5 rounded border border-blue-500/20 font-bold">1. Auto-Fallback</span>
+            <span class="bg-[var(--sidebar)] px-1.5 py-0.5 rounded border border-[var(--border)]">2. Auto-UrlTest</span>
+            <span class="bg-[var(--sidebar)] px-1.5 py-0.5 rounded border border-[var(--border)]">3. DIRECT</span>
+          </div>
+          <div class="mt-1.5 text-[12px] text-emerald-500">🌟 Первые в списке: США 🇺🇸, Германия 🇩🇪, Нидерланды 🇳🇱</div>
+        </div>
+
+        <div id="group-media" class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-semibold text-[var(--foreground)]">🎬 Media-Streaming</div>
+          <div class="flex gap-1 mt-1 flex-wrap font-mono text-[12px]">
+            <span class="bg-blue-500/10 text-blue-500 px-1.5 py-0.5 rounded border border-blue-500/20 font-bold">1. Auto-Fallback</span>
+            <span class="bg-[var(--sidebar)] px-1.5 py-0.5 rounded border border-[var(--border)]">2. Auto-UrlTest</span>
+            <span class="bg-[var(--sidebar)] px-1.5 py-0.5 rounded border border-[var(--border)]">3. DIRECT</span>
+          </div>
+        </div>
+
+        <div id="group-discord" class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-semibold text-[var(--foreground)]">💬 Discord & ✈️ Telegram</div>
+          <div class="flex gap-1 mt-1 flex-wrap font-mono text-[12px]">
+            <span class="bg-blue-500/10 text-blue-500 px-1.5 py-0.5 rounded border border-blue-500/20 font-bold">1. Auto-Fallback</span>
+            <span class="bg-[var(--sidebar)] px-1.5 py-0.5 rounded border border-[var(--border)]">2. Auto-UrlTest</span>
+          </div>
+        </div>
+
+        <div id="group-games" class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-semibold text-[var(--foreground)]">🎯 Games</div>
+          <div class="flex gap-1 mt-1 flex-wrap font-mono text-[12px]">
+            <span class="bg-purple-500/10 text-purple-400 px-1.5 py-0.5 rounded border border-purple-500/20 font-bold">1. DIRECT (0 ms)</span>
+            <span class="bg-[var(--sidebar)] px-1.5 py-0.5 rounded border border-[var(--border)]">2. Auto-Fallback</span>
+          </div>
+        </div>
+
+        <div id="group-proxy" class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-semibold text-[var(--foreground)]">🌐 PROXY (Основная группа)</div>
+          <div class="text-[12px] text-[var(--muted-foreground)] mt-1">
+            По умолчанию передает в: <span class="text-blue-500 font-mono font-bold">Auto-Fallback</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Column 4: Smart Failover Engine & Exit Nodes -->
+      <div class="space-y-3">
+        <div class="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] flex items-center gap-1.5">
+          <span>4️⃣</span> Уровни Auto-Fallback
+        </div>
+
+        <div id="tier-direct" class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs transition duration-300">
+          <div class="font-bold text-amber-500 flex items-center justify-between">
+            <span>⚡ Прямой выход (DIRECT)</span>
+            <span class="text-[10px] px-1.5 bg-amber-500/20 rounded">Провайдер</span>
+          </div>
+          <div class="text-[12px] text-[var(--foreground)] mt-1">
+            Прямое соединение без шифрования и задержек для банков и Рунета.
+          </div>
+        </div>
+
+        <div id="tier-1" class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-bold text-emerald-500 flex items-center justify-between">
+            <span>🥇 Tier 1: Финляндия 🇫🇮 & Швеция 🇸🇪</span>
+            <span class="text-[10px] px-1.5 bg-emerald-500/20 rounded font-mono">30–45 ms</span>
+          </div>
+          <div class="text-[12px] text-[var(--muted-foreground)] mt-1">
+            Минимальная физическая задержка. Если они живы — весь трафик идет через них.
+          </div>
+        </div>
+
+        <div id="tier-2" class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-bold text-sky-400 flex items-center justify-between">
+            <span>🥈 Tier 2: Мосты (Москва ➔ EU) & Обход</span>
+            <span class="text-[10px] px-1.5 bg-sky-500/20 rounded">Анти-ТСПУ</span>
+          </div>
+          <div class="text-[12px] text-[var(--muted-foreground)] mt-1">
+            Мгновенный резерв для мобильного LTE при блокировке внешних протоколов.
+          </div>
+        </div>
+
+        <div id="tier-3" class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-bold text-blue-400 flex items-center justify-between">
+            <span>🥉 Tier 3: Ближняя Европа (DE, NL, EE, PL)</span>
+            <span class="text-[10px] px-1.5 bg-blue-500/20 rounded font-mono">50–70 ms</span>
+          </div>
+          <div class="text-[12px] text-[var(--muted-foreground)] mt-1">
+            Германия, Нидерланды, Эстония, Польша — мощные дата-центры с неограниченной полосой.
+          </div>
+        </div>
+
+        <div id="tier-5" class="p-3 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs transition duration-300">
+          <div class="font-bold text-indigo-400 flex items-center justify-between">
+            <span>🌍 Tier 5: США 🇺🇸 & Дальнее зарубежье</span>
+            <span class="text-[10px] px-1.5 bg-indigo-500/20 rounded font-mono">110–140 ms</span>
+          </div>
+          <div class="text-[12px] text-[var(--muted-foreground)] mt-1">
+            Необходимы для работы OpenAI / Gemini и специфичных американских ресурсов.
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Summary Explaination Callout -->
+    <div class="p-4 rounded-xl bg-[var(--sidebar)] border border-[var(--border)] text-xs leading-relaxed text-[var(--muted-foreground)] space-y-2">
+      <div class="font-semibold text-[var(--foreground)] flex items-center gap-1.5">
+        <span>💡</span> Главная идея и почему это работает без сбоев:
+      </div>
+      <p>
+        1. <strong>Вам не нужно вручную переключать серверы:</strong> Aegis опрашивает серверы раз в 20 секунд. Если Финляндию заблокировали по протоколу или она упала — трафик за 1 миллисекунду уходит на Мосты (Москва ➔ EU) или Германию.
+      </p>
+      <p>
+        2. <strong>Банки и Госуслуги не ломаются:</strong> Правила фильтрации проверяются первыми. Трафик к <span class="font-mono text-[var(--foreground)]">sberbank.ru</span> или <span class="font-mono text-[var(--foreground)]">gosuslugi.ru</span> даже не касается VPN-серверов и идет через вашего домашнего/мобильного провайдера напрямую.
+      </p>
+      <p>
+        3. <strong>Во FlClash больше нет каши:</strong> Вместо 14 лишних под-групп («url-test-ai», «fallback-media») вы видите только то, чем реально пользуетесь.
+      </p>
+    </div>
+
+  </div>
+
+  <script>
+    function clearHighlights() {
+      document.querySelectorAll('.active-flow').forEach(el => el.classList.remove('active-flow'));
+    }
+
+    function highlight(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('active-flow');
+    }
+
+    function setStatus(text, color = 'text-blue-500', bg = 'bg-blue-500/10', border = 'border-blue-500/20') {
+      const el = document.getElementById('match-status');
+      el.className = `text-xs font-mono font-semibold px-2.5 py-0.5 rounded-full border ${color} ${bg} ${border}`;
+      el.innerText = text;
+    }
+
+    function simulateTraffic(domain) {
+      clearHighlights();
+      document.getElementById('custom-domain').value = domain;
+      highlight('step-app');
+      highlight('step-tun');
+
+      const d = domain.toLowerCase();
+
+      // Rule Evaluation
+      if (d.includes('gosuslugi') || d.includes('sberbank') || d.endsWith('.ru') || d.endsWith('.su')) {
+        highlight('rule-ru');
+        highlight('tier-direct');
+        setStatus(`Маршрут: ${domain} ➔ Правило: Рунет/Банки ➔ DIRECT (Без VPN)`, 'text-amber-500', 'bg-amber-500/10', 'border-amber-500/20');
+      } else if (d.includes('steam') || d.includes('riot') || d.includes('epic') || d.includes('blizzard') || d.includes('ea')) {
+        highlight('rule-games');
+        highlight('group-games');
+        highlight('tier-direct');
+        setStatus(`Маршрут: ${domain} ➔ Правило: Игры ➔ Группа 🎯 Games ➔ Выход: DIRECT (Пинг 0 мс)`, 'text-purple-400', 'bg-purple-500/10', 'border-purple-500/20');
+      } else if (d.includes('chatgpt') || d.includes('openai') || d.includes('claude') || d.includes('anthropic') || d.includes('gemini')) {
+        highlight('rule-ai');
+        highlight('group-ai');
+        highlight('tier-1');
+        highlight('tier-5');
+        setStatus(`Маршрут: ${domain} ➔ Правило: AI ➔ Группа 🤖 AI-Services ➔ Серверы США / Финляндия`, 'text-emerald-400', 'bg-emerald-500/10', 'border-emerald-500/20');
+      } else if (d.includes('youtube') || d.includes('googlevideo') || d.includes('soundcloud')) {
+        highlight('rule-media');
+        highlight('group-media');
+        highlight('tier-1');
+        setStatus(`Маршрут: ${domain} ➔ Правило: Стриминг ➔ Группа 🎬 Media ➔ Auto-Fallback (FI/SE ~35ms)`, 'text-red-400', 'bg-red-500/10', 'border-red-500/20');
+      } else if (d.includes('discord')) {
+        highlight('rule-discord');
+        highlight('group-discord');
+        highlight('tier-1');
+        setStatus(`Маршрут: ${domain} ➔ Правило: Discord ➔ Группа 💬 Discord ➔ Auto-Fallback (UDP xudp)`, 'text-indigo-400', 'bg-indigo-500/10', 'border-indigo-500/20');
+      } else if (d.includes('telegram') || d.includes('t.me')) {
+        highlight('rule-telegram');
+        highlight('group-discord');
+        highlight('tier-1');
+        setStatus(`Маршрут: ${domain} ➔ Правило: Telegram ➔ Группа ✈️ Telegram ➔ Auto-Fallback (Европа)`, 'text-sky-400', 'bg-sky-500/10', 'border-sky-500/20');
+      } else {
+        highlight('rule-match');
+        highlight('group-proxy');
+        highlight('tier-1');
+        setStatus(`Маршрут: ${domain} ➔ Правило: MATCH ➔ Группа PROXY ➔ Auto-Fallback (Tier 1 FI/SE)`, 'text-blue-400', 'bg-blue-500/10', 'border-blue-500/20');
+      }
+    }
+
+    function simulateCustomTraffic() {
+      const val = document.getElementById('custom-domain').value.trim();
+      if (val) simulateTraffic(val);
+    }
+
+    // Auto-run first example on load
+    simulateTraffic('chatgpt.com');
+  </script>
+</body>
+</html>

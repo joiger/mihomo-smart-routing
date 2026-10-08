@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Aegis: Fallback vs UrlTest Deep Dive</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    .node-active {
+      border-color: #10b981 !important;
+      background-color: rgba(16, 185, 129, 0.12) !important;
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.3);
+    }
+    .node-standby {
+      border-color: var(--border);
+      opacity: 0.65;
+    }
+    .node-dead {
+      border-color: #ef4444 !important;
+      background-color: rgba(239, 68, 68, 0.1) !important;
+      opacity: 0.5;
+      text-decoration: line-through;
+    }
+    .badge-live {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+    .badge-dead {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] p-4 sm:p-6 font-sans select-none antialiased min-h-screen">
+  <div class="max-w-5xl mx-auto space-y-6">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[var(--border)]">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">🔬</span>
+          <h1 class="text-xl font-bold tracking-tight">Как устроен Fallback, пинги и группа PROXY</h1>
+        </div>
+        <p class="text-xs text-[var(--muted-foreground)] mt-1">
+          Разбор внутренней механики Mihomo: алгоритм выбора, защита от разрыва сессий и отличие от Url-Test
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-mono bg-blue-500/10 text-blue-500 px-3 py-1 rounded-full border border-blue-500/20 font-semibold">
+          Mihomo Core Runtime
+        </span>
+      </div>
+    </div>
+
+    <!-- Interactive Simulation Control Panel -->
+    <div class="p-4 rounded-xl bg-[var(--card)] border border-[var(--border)] space-y-3">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold uppercase tracking-wider text-[var(--foreground)] flex items-center gap-1.5">
+          <span>🎮</span> Симулятор сетевых событий (Попробуйте переключить):
+        </span>
+        <span id="scenario-label" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-mono">
+          Сценарий: Идеальная сеть
+        </span>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <button onclick="setScenario('normal')" class="px-3 py-2 rounded-lg text-xs font-medium bg-[var(--sidebar)] hover:bg-emerald-500/20 border border-[var(--border)] transition text-left">
+          <div class="font-bold text-emerald-500">1. Все ноды живы</div>
+          <div class="text-[11px] text-[var(--muted-foreground)]">Штатный режим</div>
+        </button>
+        <button onclick="setScenario('jitter')" class="px-3 py-2 rounded-lg text-xs font-medium bg-[var(--sidebar)] hover:bg-amber-500/20 border border-[var(--border)] transition text-left">
+          <div class="font-bold text-amber-500">2. Колебания пинга</div>
+          <div class="text-[11px] text-[var(--muted-foreground)]">FI: 38↔55ms, DE: 42ms</div>
+        </button>
+        <button onclick="setScenario('fi_dead')" class="px-3 py-2 rounded-lg text-xs font-medium bg-[var(--sidebar)] hover:bg-red-500/20 border border-[var(--border)] transition text-left">
+          <div class="font-bold text-red-500">3. ТСПУ блок Финляндии</div>
+          <div class="text-[11px] text-[var(--muted-foreground)]">Tier 1 не отвечает</div>
+        </button>
+        <button onclick="setScenario('fi_recovered')" class="px-3 py-2 rounded-lg text-xs font-medium bg-[var(--sidebar)] hover:bg-blue-500/20 border border-[var(--border)] transition text-left">
+          <div class="font-bold text-blue-500">4. Финляндия ожила</div>
+          <div class="text-[11px] text-[var(--muted-foreground)]">Возврат на №1</div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Battle of Algorithms: Fallback vs Url-Test -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      <!-- Left: Fallback Algorithm -->
+      <div class="p-4 rounded-xl bg-[var(--card)] border border-[var(--border)] space-y-4">
+        <div class="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
+          <div class="flex items-center gap-1.5 font-bold text-sm text-emerald-500">
+            <span>🛡️</span> Алгоритм Fallback (Приоритетный резерв)
+          </div>
+          <span class="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-mono font-semibold">
+            Рекомендуется
+          </span>
+        </div>
+
+        <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+          Проверяет ноды <strong>строго по списку приоритета</strong>. Пока жива нода №1 — он держит её зубами, даже если соседний сервер временно пингуется быстрее.
+        </p>
+
+        <!-- Fallback Nodes Visual Stack -->
+        <div class="space-y-2">
+          <div id="fb-node-1" class="p-3 rounded-lg border transition duration-300 node-active flex items-center justify-between text-xs">
+            <div>
+              <div class="font-bold text-[var(--foreground)]">1. 🇫🇮 Финляндия (Tier 1)</div>
+              <div class="text-[11px] text-[var(--muted-foreground)]">Пинг: <span id="fb-ping-1" class="font-mono text-emerald-500">38 ms</span></div>
+            </div>
+            <div id="fb-status-1" class="text-xs font-mono px-2 py-0.5 rounded badge-live font-bold">АКТИВЕН</div>
+          </div>
+
+          <div id="fb-node-2" class="p-3 rounded-lg border transition duration-300 node-standby flex items-center justify-between text-xs">
+            <div>
+              <div class="font-bold text-[var(--foreground)]">2. 🌉 Москва ➔ DE Мост (Tier 2)</div>
+              <div class="text-[11px] text-[var(--muted-foreground)]">Пинг: <span id="fb-ping-2" class="font-mono">48 ms</span> (Обход ТСПУ)</div>
+            </div>
+            <div id="fb-status-2" class="text-xs font-mono px-2 py-0.5 rounded bg-[var(--sidebar)] text-[var(--muted-foreground)]">Ожидание</div>
+          </div>
+
+          <div id="fb-node-3" class="p-3 rounded-lg border transition duration-300 node-standby flex items-center justify-between text-xs">
+            <div>
+              <div class="font-bold text-[var(--foreground)]">3. 🇩🇪 Германия (Tier 3)</div>
+              <div class="text-[11px] text-[var(--muted-foreground)]">Пинг: <span id="fb-ping-3" class="font-mono">42 ms</span></div>
+            </div>
+            <div id="fb-status-3" class="text-xs font-mono px-2 py-0.5 rounded bg-[var(--sidebar)] text-[var(--muted-foreground)]">Ожидание</div>
+          </div>
+        </div>
+
+        <!-- Connection State Metric -->
+        <div class="p-3 rounded-lg bg-[var(--sidebar)] border border-[var(--border)] text-xs space-y-1">
+          <div class="flex justify-between">
+            <span class="text-[var(--muted-foreground)]">Состояние TCP сессий:</span>
+            <span id="fb-session" class="font-bold text-emerald-500">Стабильно (0 разрывов)</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-[var(--muted-foreground)]">Причина выбора:</span>
+            <span id="fb-reason" class="font-mono text-[11px] text-[var(--foreground)]">Первый живой по списку</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Url-Test Algorithm -->
+      <div class="p-4 rounded-xl bg-[var(--card)] border border-[var(--border)] space-y-4">
+        <div class="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
+          <div class="flex items-center gap-1.5 font-bold text-sm text-amber-500">
+            <span>⚡</span> Алгоритм Url-Test (Гонка пингов)
+          </div>
+          <span class="text-[11px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 font-mono font-semibold">
+            Быстрый, но шумный
+          </span>
+        </div>
+
+        <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+          Каждые 30 секунд опрашивает всех и выбирает тот сервер, у которого пинг на <strong>2 миллисекунды меньше</strong>.
+        </p>
+
+        <!-- UrlTest Nodes Visual Stack -->
+        <div class="space-y-2">
+          <div id="ut-node-1" class="p-3 rounded-lg border transition duration-300 node-active flex items-center justify-between text-xs">
+            <div>
+              <div class="font-bold text-[var(--foreground)]">🇫🇮 Финляндия</div>
+              <div class="text-[11px] text-[var(--muted-foreground)]">Пинг: <span id="ut-ping-1" class="font-mono text-emerald-500">38 ms</span></div>
+            </div>
+            <div id="ut-status-1" class="text-xs font-mono px-2 py-0.5 rounded badge-live font-bold">АКТИВЕН</div>
+          </div>
+
+          <div id="ut-node-2" class="p-3 rounded-lg border transition duration-300 node-standby flex items-center justify-between text-xs">
+            <div>
+              <div class="font-bold text-[var(--foreground)]">🇩🇪 Германия</div>
+              <div class="text-[11px] text-[var(--muted-foreground)]">Пинг: <span id="ut-ping-2" class="font-mono">42 ms</span></div>
+            </div>
+            <div id="ut-status-2" class="text-xs font-mono px-2 py-0.5 rounded bg-[var(--sidebar)] text-[var(--muted-foreground)]">Ожидание</div>
+          </div>
+
+          <div id="ut-node-3" class="p-3 rounded-lg border transition duration-300 node-standby flex items-center justify-between text-xs">
+            <div>
+              <div class="font-bold text-[var(--foreground)]">🌉 Москва ➔ DE Мост</div>
+              <div class="text-[11px] text-[var(--muted-foreground)]">Пинг: <span id="ut-ping-3" class="font-mono">48 ms</span></div>
+            </div>
+            <div id="ut-status-3" class="text-xs font-mono px-2 py-0.5 rounded bg-[var(--sidebar)] text-[var(--muted-foreground)]">Ожидание</div>
+          </div>
+        </div>
+
+        <!-- Connection State Metric -->
+        <div class="p-3 rounded-lg bg-[var(--sidebar)] border border-[var(--border)] text-xs space-y-1">
+          <div class="flex justify-between">
+            <span class="text-[var(--muted-foreground)]">Состояние TCP сессий:</span>
+            <span id="ut-session" class="font-bold text-amber-500">Внимание: возможен сброс сессий</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-[var(--muted-foreground)]">Дребезг (Flapping):</span>
+            <span id="ut-flapping" class="font-mono text-[11px] text-[var(--foreground)]">Низкий (пока пинги стабильны)</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Deep Dive Technical Parameters in Aegis Config -->
+    <div class="p-4 rounded-xl bg-[var(--card)] border border-[var(--border)] space-y-4">
+      <div class="font-bold text-xs uppercase tracking-wider text-[var(--foreground)] flex items-center gap-1.5">
+        <span>⏱️</span> Точные параметры пинга в нашем конфиге (sync.py)
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+        <div class="p-3 rounded-lg bg-[var(--sidebar)] border border-[var(--border)] space-y-1">
+          <div class="font-mono text-blue-500 font-bold">interval: 20</div>
+          <div class="font-semibold text-[var(--foreground)]">Как часто пингует?</div>
+          <div class="text-[11px] text-[var(--muted-foreground)]">Каждые <strong>20 секунд</strong> ядро отправляет фоновый легкий HTTP HEAD запрос к <span class="font-mono">generate_204</span>.</div>
+        </div>
+
+        <div class="p-3 rounded-lg bg-[var(--sidebar)] border border-[var(--border)] space-y-1">
+          <div class="font-mono text-purple-400 font-bold">timeout: 2500</div>
+          <div class="font-semibold text-[var(--foreground)]">Сколько ждет ответа?</div>
+          <div class="text-[11px] text-[var(--muted-foreground)]">Если сервер не ответил за <strong>2.5 секунды</strong>, запрос считается неудачным (Packet Drop).</div>
+        </div>
+
+        <div class="p-3 rounded-lg bg-[var(--sidebar)] border border-[var(--border)] space-y-1">
+          <div class="font-mono text-emerald-500 font-bold">max-failed-times: 2</div>
+          <div class="font-semibold text-[var(--foreground)]">Защита от ложных сбоев</div>
+          <div class="text-[11px] text-[var(--muted-foreground)]">Нужно <strong>2 фейла подряд</strong>. Случайная потеря 1 пакета на Wi-Fi не вызовет панику и переключение.</div>
+        </div>
+
+        <div class="p-3 rounded-lg bg-[var(--sidebar)] border border-[var(--border)] space-y-1">
+          <div class="font-mono text-amber-500 font-bold">lazy: false</div>
+          <div class="font-semibold text-[var(--foreground)]">Непрерывный контроль</div>
+          <div class="text-[11px] text-[var(--muted-foreground)]">Пингует всегда, даже когда вы спите. Когда вы откроете телефон — живой сервер уже выбран мгновенно!</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- What is the PROXY group? -->
+    <div class="p-4 rounded-xl bg-[var(--sidebar)] border border-[var(--border)] space-y-3">
+      <div class="font-bold text-xs uppercase tracking-wider text-[var(--foreground)] flex items-center gap-1.5">
+        <span>🌐</span> Для чего нужен общий раздел PROXY в самом верху?
+      </div>
+      
+      <div class="text-xs text-[var(--muted-foreground)] leading-relaxed space-y-2">
+        <p>
+          В правилах роутинга Mihomo последней строкой всегда стоит директива: <span class="font-mono text-blue-400 font-bold">MATCH, PROXY</span>.
+        </p>
+        <p>
+          Это <strong>«зонтичное правило» (Catch-All)</strong>: если вы заходите на сайт, который не описан персонально (не Telegram, не Discord, не YouTube, не ChatGPT и не российский домен), он автоматически отправляется в группу <strong>PROXY</strong>.
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+          <div class="p-2.5 rounded bg-[var(--card)] border border-[var(--border)]">
+            <div class="font-semibold text-[var(--foreground)]">1. Режим «Всё само» (По умолчанию):</div>
+            <div class="text-[11px] mt-0.5">Внутри группы <span class="font-mono">PROXY</span> выбран <span class="font-mono text-emerald-500 font-bold">Auto-Fallback</span>. Любой незнакомый зарубежный сайт открывается через быстрейшую финскую/шведскую ноду.</div>
+          </div>
+          <div class="p-2.5 rounded bg-[var(--card)] border border-[var(--border)]">
+            <div class="font-semibold text-[var(--foreground)]">2. Режим «Мастер-рубильник»:</div>
+            <div class="text-[11px] mt-0.5">Если вам вдруг понадобилось пустить весь неопределенный интернет конкретно через США или Германию — вы просто выбираете эту страну в карточке <span class="font-mono">PROXY</span> во FlClash.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function setScenario(sc) {
+      const label = document.getElementById('scenario-label');
+      
+      // Reset classes
+      ['fb-node-1', 'fb-node-2', 'fb-node-3', 'ut-node-1', 'ut-node-2', 'ut-node-3'].forEach(id => {
+        const el = document.getElementById(id);
+        el.className = 'p-3 rounded-lg border transition duration-300 node-standby flex items-center justify-between text-xs';
+      });
+
+      if (sc === 'normal') {
+        label.innerText = 'Сценарий: Идеальная сеть';
+        label.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-mono';
+
+        // Fallback: Node 1 active
+        document.getElementById('fb-node-1').className = 'p-3 rounded-lg border transition duration-300 node-active flex items-center justify-between text-xs';
+        document.getElementById('fb-ping-1').innerText = '38 ms';
+        document.getElementById('fb-status-1').className = 'text-xs font-mono px-2 py-0.5 rounded badge-live font-bold';
+        document.getElementById('fb-status-1').innerText = 'АКТИВЕН';
+        document.getElementById('fb-status-2').innerText = 'Ожидание';
+        document.getElementById('fb-session').innerText = 'Стабильно (0 разрывов)';
+        document.getElementById('fb-session').className = 'font-bold text-emerald-500';
+        document.getElementById('fb-reason').innerText = 'Первый живой по списку (Tier 1)';
+
+        // UrlTest: Node 1 active (lowest ping)
+        document.getElementById('ut-node-1').className = 'p-3 rounded-lg border transition duration-300 node-active flex items-center justify-between text-xs';
+        document.getElementById('ut-ping-1').innerText = '38 ms';
+        document.getElementById('ut-status-1').className = 'text-xs font-mono px-2 py-0.5 rounded badge-live font-bold';
+        document.getElementById('ut-status-1').innerText = 'АКТИВЕН';
+        document.getElementById('ut-status-2').innerText = 'Ожидание';
+        document.getElementById('ut-session').innerText = 'Стабильно';
+        document.getElementById('ut-session').className = 'font-bold text-emerald-500';
+        document.getElementById('ut-flapping').innerText = 'Спокойно (пинг 38 ms < 42 ms)';
+      } 
+      else if (sc === 'jitter') {
+        label.innerText = 'Сценарий: Пинг Финляндии колеблется (38 ➔ 55 ms)';
+        label.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 font-mono';
+
+        // Fallback: STAYS ON FINLAND! (Because it's still alive)
+        document.getElementById('fb-node-1').className = 'p-3 rounded-lg border transition duration-300 node-active flex items-center justify-between text-xs';
+        document.getElementById('fb-ping-1').innerText = '55 ms (повысился)';
+        document.getElementById('fb-status-1').className = 'text-xs font-mono px-2 py-0.5 rounded badge-live font-bold';
+        document.getElementById('fb-status-1').innerText = 'АКТИВЕН';
+        document.getElementById('fb-status-2').innerText = 'Ожидание';
+        document.getElementById('fb-session').innerText = '100% Стабильно (0 разрывов!)';
+        document.getElementById('fb-session').className = 'font-bold text-emerald-500';
+        document.getElementById('fb-reason').innerText = 'Не переключает, так как Tier 1 жив';
+
+        // UrlTest: FLIPS TO GERMANY! (Because 42 ms < 55 ms) -> Causes connection drop/jitter!
+        document.getElementById('ut-node-2').className = 'p-3 rounded-lg border transition duration-300 node-active flex items-center justify-between text-xs';
+        document.getElementById('ut-ping-1').innerText = '55 ms (проиграл)';
+        document.getElementById('ut-status-1').className = 'text-xs font-mono px-2 py-0.5 rounded bg-[var(--sidebar)] text-[var(--muted-foreground)]';
+        document.getElementById('ut-status-1').innerText = 'Ожидание';
+        document.getElementById('ut-status-2').className = 'text-xs font-mono px-2 py-0.5 rounded badge-live font-bold';
+        document.getElementById('ut-status-2').innerText = 'АКТИВЕН';
+        document.getElementById('ut-session').innerText = '⚠️ РАЗРЫВ СЕССИЙ! IP изменился на DE';
+        document.getElementById('ut-session').className = 'font-bold text-red-500';
+        document.getElementById('ut-flapping').innerText = 'ДРЕБЕЗГ: скачок с FI на DE из-за 13 мс!';
+      }
+      else if (sc === 'fi_dead') {
+        label.innerText = 'Сценарий: ТСПУ заблокировал Финляндию (Финляндия мертва)';
+        label.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-red-500/10 text-red-500 border border-red-500/20 font-mono';
+
+        // Fallback: Graceful failover to Tier 2 (Moscow -> DE Transit Bridge)
+        document.getElementById('fb-node-1').className = 'p-3 rounded-lg border transition duration-300 node-dead flex items-center justify-between text-xs';
+        document.getElementById('fb-ping-1').innerText = 'TIMEOUT (2 фейла)';
+        document.getElementById('fb-status-1').className = 'text-xs font-mono px-2 py-0.5 rounded badge-dead font-bold';
+        document.getElementById('fb-status-1').innerText = 'МЁРТВ';
+
+        document.getElementById('fb-node-2').className = 'p-3 rounded-lg border transition duration-300 node-active flex items-center justify-between text-xs';
+        document.getElementById('fb-status-2').className = 'text-xs font-mono px-2 py-0.5 rounded badge-live font-bold';
+        document.getElementById('fb-status-2').innerText = 'АКТИВЕН (FAILOVER)';
+        document.getElementById('fb-session').innerText = 'Мгновенное переключение на Мост!';
+        document.getElementById('fb-session').className = 'font-bold text-sky-400';
+        document.getElementById('fb-reason').innerText = 'Tier 1 упал -> Включен Tier 2 (Обход)';
+
+        // UrlTest: Switches to Germany (fastest remaining)
+        document.getElementById('ut-node-1').className = 'p-3 rounded-lg border transition duration-300 node-dead flex items-center justify-between text-xs';
+        document.getElementById('ut-ping-1').innerText = 'TIMEOUT';
+        document.getElementById('ut-status-1').className = 'text-xs font-mono px-2 py-0.5 rounded badge-dead font-bold';
+        document.getElementById('ut-status-1').innerText = 'МЁРТВ';
+
+        document.getElementById('ut-node-2').className = 'p-3 rounded-lg border transition duration-300 node-active flex items-center justify-between text-xs';
+        document.getElementById('ut-status-2').className = 'text-xs font-mono px-2 py-0.5 rounded badge-live font-bold';
+        document.getElementById('ut-status-2').innerText = 'АКТИВЕН';
+        document.getElementById('ut-session').innerText = 'Переключен на DE';
+        document.getElementById('ut-session').className = 'font-bold text-amber-500';
+        document.getElementById('ut-flapping').innerText = 'Выбран минимум из живых';
+      }
+      else if (sc === 'fi_recovered') {
+        label.innerText = 'Сценарий: Финляндия восстановилась (Пинг 38 ms)';
+        label.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 font-mono';
+
+        // Fallback: IMMEDIATELY RETURNS TO TIER 1!
+        document.getElementById('fb-node-1').className = 'p-3 rounded-lg border transition duration-300 node-active flex items-center justify-between text-xs';
+        document.getElementById('fb-ping-1').innerText = '38 ms (Ожил!)';
+        document.getElementById('fb-status-1').className = 'text-xs font-mono px-2 py-0.5 rounded badge-live font-bold';
+        document.getElementById('fb-status-1').innerText = 'АКТИВЕН (ВОЗВРАТ)';
+        document.getElementById('fb-status-2').innerText = 'Ожидание';
+        document.getElementById('fb-session').innerText = 'Возврат на высший приоритет';
+        document.getElementById('fb-session').className = 'font-bold text-emerald-500';
+        document.getElementById('fb-reason').innerText = 'Нода №1 ожила -> автоматический возврат';
+
+        // UrlTest: Also returns to Node 1
+        document.getElementById('ut-node-1').className = 'p-3 rounded-lg border transition duration-300 node-active flex items-center justify-between text-xs';
+        document.getElementById('ut-ping-1').innerText = '38 ms';
+        document.getElementById('ut-status-1').className = 'text-xs font-mono px-2 py-0.5 rounded badge-live font-bold';
+        document.getElementById('ut-status-1').innerText = 'АКТИВЕН';
+        document.getElementById('ut-status-2').innerText = 'Ожидание';
+        document.getElementById('ut-session').innerText = 'Снова переключение IP';
+        document.getElementById('ut-session').className = 'font-bold text-amber-500';
+        document.getElementById('ut-flapping').innerText = 'Опять смена маршрута';
+      }
+    }
+  </script>
+</body>
+</html>

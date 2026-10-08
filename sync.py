@@ -898,6 +898,8 @@ DEFAULT_CATEGORIES = [
         "priority": "ai",
         "default_options": ["🤖 Auto-AI-Stable", "Auto-Fallback", "🛡️ Mobile-Bypass", "DIRECT"],
         "rules": [
+            "DOMAIN,cloudcode-pa.googleapis.com",
+            "DOMAIN,daily-cloudcode-pa.googleapis.com",
             "DOMAIN-SUFFIX,gemini.google.com",
             "DOMAIN-SUFFIX,generativelanguage.googleapis.com",
             "DOMAIN-SUFFIX,aistudio.google.com",
@@ -914,6 +916,8 @@ DEFAULT_CATEGORIES = [
             "DOMAIN-SUFFIX,openai.com",
             "DOMAIN-SUFFIX,chatgpt.com",
             "GEOSITE,google-gemini",
+            "GEOSITE,google",
+            "GEOIP,google",
             "GEOSITE,openai",
             "GEOSITE,anthropic",
         ]
@@ -1046,9 +1050,16 @@ def build_mihomo_config(unique_proxies, user_options=None):
         "DOMAIN-SUFFIX,gvt2.com,DIRECT",
         "DOMAIN-SUFFIX,push.apple.com,DIRECT",
 
-        # Antigravity Unlocker (confeden) direct bypass
-        "DOMAIN,cloudcode-pa.googleapis.com,DIRECT",
-        "DOMAIN,daily-cloudcode-pa.googleapis.com,DIRECT",
+        # GitHub Gist & Raw Anti-DPI bypass (fixes tls handshake eof in Clash Verge)
+        "DOMAIN,gist.githubusercontent.com,🛡️ Mobile-Bypass",
+        "DOMAIN-SUFFIX,githubusercontent.com,🛡️ Mobile-Bypass",
+        "DOMAIN-SUFFIX,github.com,🛡️ Mobile-Bypass",
+
+        # Microsoft Telemetry drop (prevents proxy traffic waste)
+        "DOMAIN-SUFFIX,events.data.microsoft.com,REJECT",
+        "DOMAIN-SUFFIX,telemetry.microsoft.com,REJECT",
+
+        # Unlocker Relay IPs (direct if needed for server auth)
         "IP-CIDR,45.155.204.190/32,DIRECT,no-resolve",
         "IP-CIDR,83.220.169.155/32,DIRECT,no-resolve",
     ]
@@ -1100,6 +1111,7 @@ def build_mihomo_config(unique_proxies, user_options=None):
             "auto-detect-interface": True,
             "strict-route": True,
             "endpoint-independent-nat": True,
+            "find-process-mode": "strict",
             "mtu": 1420
         },
         "dns": {
@@ -1129,8 +1141,6 @@ def build_mihomo_config(unique_proxies, user_options=None):
                 "1.1.1.1"
             ],
             "fake-ip-filter": [
-                "cloudcode-pa.googleapis.com",
-                "daily-cloudcode-pa.googleapis.com",
                 "*.lan", "*.local", "localhost", "time.*", "ntp.*",
                 "+.pool.ntp.org", "stun.*", "*.msftconnecttest.com", "*.msftncsi.com",
                 "connectivitycheck.gstatic.com", "connectivitycheck.android.com",

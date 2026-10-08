@@ -27,3 +27,4 @@ Thumbs.db
 
 # Agent workspaces
 .agents/
+.codebase-memory/

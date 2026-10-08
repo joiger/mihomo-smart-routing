@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Aegis: Auto-Fallback vs Mobile-Bypass</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    .active-card {
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.35);
+      border-color: #3b82f6 !important;
+    }
+    .badge-primary {
+      background: rgba(59, 130, 246, 0.15);
+      color: #3b82f6;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] p-4 sm:p-6 font-sans select-none antialiased min-h-screen">
+  <div class="max-w-5xl mx-auto space-y-6">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[var(--border)]">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">📊</span>
+          <h1 class="text-xl font-bold tracking-tight">Инфографика: Auto-Fallback vs 🛡️ Mobile-Bypass</h1>
+        </div>
+        <p class="text-xs text-[var(--muted-foreground)] mt-1">
+          Разделение труда: скоростной коридор для домашнего Wi-Fi и бронебойный обход ТСПУ для сотовой связи
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-mono bg-blue-500/10 text-blue-500 px-3 py-1 rounded-full border border-blue-500/20 font-semibold">
+          Aegis Dual-Engine
+        </span>
+      </div>
+    </div>
+
+    <!-- Interactive Mode Switcher -->
+    <div class="p-4 rounded-xl bg-[var(--card)] border border-[var(--border)] space-y-3">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold uppercase tracking-wider text-[var(--foreground)] flex items-center gap-1.5">
+          <span>⚡</span> Симуляция ситуации: Где вы сейчас находитесь?
+        </span>
+        <span id="current-mode-status" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-mono">
+          Режим: Домашний Wi-Fi
+        </span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <button onclick="selectMode('wifi')" id="btn-wifi" class="p-3.5 rounded-xl border border-blue-500/40 bg-blue-500/10 text-left transition hover:scale-[1.01]">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-sm text-blue-500 flex items-center gap-1.5">
+              <span>🏠</span> 1. Я дома / в офисе на Wi-Fi
+            </span>
+            <span class="text-[11px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-mono font-bold">Auto-Fallback</span>
+          </div>
+          <div class="text-xs text-[var(--muted-foreground)] mt-1.5 leading-relaxed">
+            Прямой чистый канал без жесткого DPI сотовых вышек. Главный приоритет — <strong>максимальная скорость и пинг ~35 мс</strong>.
+          </div>
+        </button>
+
+        <button onclick="selectMode('lte')" id="btn-lte" class="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--sidebar)] text-left transition hover:scale-[1.01]">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-sm text-[var(--foreground)] flex items-center gap-1.5">
+              <span>📶</span> 2. Я на улице / в транспорте (LTE)
+            </span>
+            <span class="text-[11px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-500 font-mono font-bold">🛡️ Mobile-Bypass</span>
+          </div>
+          <div class="text-xs text-[var(--muted-foreground)] mt-1.5 leading-relaxed">
+            Сотовые операторы (ТСПУ) глушат прямые VLESS в Европу. Главный приоритет — <strong>пробиваемость через транзитные мосты</strong>.
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Side-by-Side Infographic Columns -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      <!-- Column Left: Auto-Fallback -->
+      <div id="col-fallback" class="p-5 rounded-2xl bg-[var(--card)] border border-[var(--border)] space-y-4 transition duration-300 active-card">
+        <div class="flex items-center justify-between border-b border-[var(--border)] pb-3">
+          <div>
+            <div class="text-base font-bold text-blue-500 flex items-center gap-1.5">
+              <span>⚡</span> Auto-Fallback
+            </div>
+            <div class="text-[11px] text-[var(--muted-foreground)]">«Скоростной автобан» для проводного интернета и Wi-Fi</div>
+          </div>
+          <span class="text-xs font-mono px-2 py-1 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20 font-bold">
+            Пинг 30–45 ms
+          </span>
+        </div>
+
+        <!-- Tier List Stack -->
+        <div class="space-y-2.5">
+          <div id="fb-tier-1" class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs">
+            <div class="flex justify-between items-center font-bold text-emerald-500">
+              <span class="flex items-center gap-1.5">🥇 1-е место: 🇫🇮 Финляндия & 🇸🇪 Швеция</span>
+              <span class="font-mono text-[11px]">30–40 ms</span>
+            </div>
+            <div class="text-[11px] text-[var(--muted-foreground)] mt-1">
+              Минимальное физическое расстояние от РФ. YouTube в 4K, мгновенная загрузка страниц.
+            </div>
+          </div>
+
+          <div id="fb-tier-2" class="p-3 rounded-xl bg-[var(--sidebar)] border border-[var(--border)] text-xs opacity-75">
+            <div class="flex justify-between items-center font-bold text-[var(--foreground)]">
+              <span class="flex items-center gap-1.5">🥈 2-е место: 🌉 Транзитные мосты (Москва ➔ EU)</span>
+              <span class="font-mono text-[11px]">45–55 ms</span>
+            </div>
+            <div class="text-[11px] text-[var(--muted-foreground)] mt-1">
+              Резервный коридор: включается автоматически, если на Финляндии сбой.
+            </div>
+          </div>
+
+          <div id="fb-tier-3" class="p-3 rounded-xl bg-[var(--sidebar)] border border-[var(--border)] text-xs opacity-75">
+            <div class="flex justify-between items-center font-bold text-[var(--foreground)]">
+              <span class="flex items-center gap-1.5">🥉 3-е место: 🇩🇪 Германия & 🇳🇱 Нидерланды</span>
+              <span class="font-mono text-[11px]">50–65 ms</span>
+            </div>
+            <div class="text-[11px] text-[var(--muted-foreground)] mt-1">
+              Европейское ядро: гигабитные каналы для тяжелых загрузок и скачиваний.
+            </div>
+          </div>
+
+          <div id="fb-tier-4" class="p-3 rounded-xl bg-[var(--sidebar)] border border-[var(--border)] text-xs opacity-60">
+            <div class="flex justify-between items-center font-bold text-[var(--muted-foreground)]">
+              <span class="flex items-center gap-1.5">🌍 4-е место: 🇺🇸 США & Дальний зарубеж</span>
+              <span class="font-mono text-[11px]">110–140 ms</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-[var(--sidebar)] border border-[var(--border)] text-xs space-y-1">
+          <div class="font-semibold text-[var(--foreground)]">💡 Когда использовать:</div>
+          <div class="text-[11px] text-[var(--muted-foreground)] leading-relaxed">
+            По умолчанию для <strong>всех домашних устройств, ПК и планшетов на Wi-Fi</strong>. Вы получаете скорость оригинального провайдера без задержек.
+          </div>
+        </div>
+      </div>
+
+      <!-- Column Right: Mobile-Bypass -->
+      <div id="col-bypass" class="p-5 rounded-2xl bg-[var(--card)] border border-[var(--border)] space-y-4 transition duration-300">
+        <div class="flex items-center justify-between border-b border-[var(--border)] pb-3">
+          <div>
+            <div class="text-base font-bold text-amber-500 flex items-center gap-1.5">
+              <span>🛡️</span> 🛡️ Mobile-Bypass
+            </div>
+            <div class="text-[11px] text-[var(--muted-foreground)]">«Вездеход» для сотовой связи (МТС, Мегафон, Билайн, Т2)</div>
+          </div>
+          <span class="text-xs font-mono px-2 py-1 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold">
+            Анти-ТСПУ 100%
+          </span>
+        </div>
+
+        <!-- Tier List Stack -->
+        <div class="space-y-2.5">
+          <div id="bp-tier-1" class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs">
+            <div class="flex justify-between items-center font-bold text-amber-500">
+              <span class="flex items-center gap-1.5">🥇 1-е место: 🌉 Транзитные мосты (Москва ➔ EU) & Обход</span>
+              <span class="font-mono text-[11px]">45–55 ms</span>
+            </div>
+            <div class="text-[11px] text-[var(--muted-foreground)] mt-1">
+              <strong>Почему пробивает:</strong> Телефон подключается к серверу в Москве (внутри РФ). Сотовый оператор думает, что вы смотрите российский сайт, а сервер пересылает трафик в Германию!
+            </div>
+          </div>
+
+          <div id="bp-tier-2" class="p-3 rounded-xl bg-[var(--sidebar)] border border-[var(--border)] text-xs opacity-75">
+            <div class="flex justify-between items-center font-bold text-[var(--foreground)]">
+              <span class="flex items-center gap-1.5">🥈 2-е место: 🇫🇮 Финляндия & 🇸🇪 Швеция</span>
+              <span class="font-mono text-[11px]">30–40 ms</span>
+            </div>
+            <div class="text-[11px] text-[var(--muted-foreground)] mt-1">
+              Прямой север: используется как резерв, если вышка оператора не фильтрует зарубежный VLESS.
+            </div>
+          </div>
+
+          <div id="bp-tier-3" class="p-3 rounded-xl bg-[var(--sidebar)] border border-[var(--border)] text-xs opacity-75">
+            <div class="flex justify-between items-center font-bold text-[var(--foreground)]">
+              <span class="flex items-center gap-1.5">🥉 3-е место: 🇩🇪 Германия & 🇳🇱 Нидерланды</span>
+              <span class="font-mono text-[11px]">50–65 ms</span>
+            </div>
+            <div class="text-[11px] text-[var(--muted-foreground)] mt-1">
+              Центральный европейский резерв.
+            </div>
+          </div>
+
+          <div id="bp-tier-4" class="p-3 rounded-xl bg-[var(--sidebar)] border border-[var(--border)] text-xs opacity-60">
+            <div class="flex justify-between items-center font-bold text-[var(--muted-foreground)]">
+              <span class="flex items-center gap-1.5">🌍 4-е место: 🇺🇸 США & Дальний зарубеж</span>
+              <span class="font-mono text-[11px]">110–140 ms</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-3 rounded-xl bg-[var(--sidebar)] border border-[var(--border)] text-xs space-y-1">
+          <div class="font-semibold text-[var(--foreground)]">💡 Когда использовать:</div>
+          <div class="text-[11px] text-[var(--muted-foreground)] leading-relaxed">
+            Включайте, когда вы <strong>на мобильном интернете (LTE/5G), в метро, поезде или в регионе</strong> с агрессивными белыми списками ТСПУ.
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Visual Anatomy Comparison Box -->
+    <div class="p-4 rounded-xl bg-[var(--sidebar)] border border-[var(--border)] text-xs space-y-3">
+      <div class="font-bold text-xs uppercase tracking-wider text-[var(--foreground)] flex items-center gap-1.5">
+        <span>🔍</span> Сравнение под микроскопом: в чем разница пакетов?
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[12px] leading-relaxed">
+        <div class="space-y-1.5 bg-[var(--card)] p-3 rounded-lg border border-[var(--border)]">
+          <div class="font-bold text-blue-500 flex items-center gap-1">
+            <span>⚡</span> Маршрут Auto-Fallback:
+          </div>
+          <div class="font-mono text-[11px] text-[var(--muted-foreground)]">
+            Телефон ➔ Прямой канал в Хельсинки/Стокгольм (VLESS Reality) ➔ Интернет
+          </div>
+          <p class="text-[11px] text-[var(--muted-foreground)]">
+            Идеально, когда канал чистый. Задержка минимальна, скорость упирается только в ваш Wi-Fi роутер.
+          </p>
+        </div>
+
+        <div class="space-y-1.5 bg-[var(--card)] p-3 rounded-lg border border-[var(--border)]">
+          <div class="font-bold text-amber-500 flex items-center gap-1">
+            <span>🛡️</span> Маршрут Mobile-Bypass:
+          </div>
+          <div class="font-mono text-[11px] text-[var(--muted-foreground)]">
+            Телефон ➔ Российский IP (Москва) ➔ Внутренний туннель ➔ Франкфурт ➔ Интернет
+          </div>
+          <p class="text-[11px] text-[var(--muted-foreground)]">
+            ТСПУ сотового оператора видит соединение внутри России до Москвы и не блокирует его. Вы получаете 100% стабильность на сотовой связи.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- How to switch in FlClash -->
+    <div class="p-4 rounded-xl bg-[var(--card)] border border-[var(--border)] text-xs space-y-2">
+      <div class="font-bold text-[var(--foreground)] flex items-center gap-1.5">
+        <span>📱</span> Как переключаться во FlClash за 1 секунду:
+      </div>
+      <p class="text-[12px] text-[var(--muted-foreground)] leading-relaxed">
+        Откройте вкладку <strong>«Прокси»</strong>. В самой верхней группе <strong>PROXY</strong> нажмите:
+      </p>
+      <div class="flex gap-2 flex-wrap pt-1 font-mono text-xs">
+        <span class="px-2.5 py-1 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20 font-bold">Auto-Fallback</span>
+        <span class="text-[var(--muted-foreground)] self-center">— дома на Wi-Fi</span>
+        <span class="px-2.5 py-1 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold ml-2">🛡️ Mobile-Bypass</span>
+        <span class="text-[var(--muted-foreground)] self-center">— на улице на сотовой связи</span>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function selectMode(mode) {
+      const colFb = document.getElementById('col-fallback');
+      const colBp = document.getElementById('col-bypass');
+      const btnWifi = document.getElementById('btn-wifi');
+      const btnLte = document.getElementById('btn-lte');
+      const status = document.getElementById('current-mode-status');
+
+      if (mode === 'wifi') {
+        colFb.classList.add('active-card');
+        colBp.classList.remove('active-card');
+        btnWifi.className = 'p-3.5 rounded-xl border border-blue-500/40 bg-blue-500/10 text-left transition hover:scale-[1.01]';
+        btnLte.className = 'p-3.5 rounded-xl border border-[var(--border)] bg-[var(--sidebar)] text-left transition hover:scale-[1.01]';
+        status.innerText = 'Режим: Домашний Wi-Fi (Auto-Fallback)';
+        status.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 border border-blue-500/20 font-mono';
+      } else {
+        colBp.classList.add('active-card');
+        colFb.classList.remove('active-card');
+        btnLte.className = 'p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 text-left transition hover:scale-[1.01]';
+        btnWifi.className = 'p-3.5 rounded-xl border border-[var(--border)] bg-[var(--sidebar)] text-left transition hover:scale-[1.01]';
+        status.innerText = 'Режим: Мобильный LTE (Mobile-Bypass)';
+        status.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/20 font-mono';
+      }
+    }
+  </script>
+</body>
+</html>
