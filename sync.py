@@ -896,7 +896,7 @@ DEFAULT_CATEGORIES = [
     {
         "name": "🤖 AI-Services",
         "priority": "ai",
-        "default_options": ["Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest", "DIRECT"],
+        "default_options": ["🤖 Auto-AI-Stable", "Auto-Fallback", "🛡️ Mobile-Bypass", "DIRECT"],
         "rules": [
             "DOMAIN-SUFFIX,gemini.google.com",
             "DOMAIN-SUFFIX,generativelanguage.googleapis.com",
@@ -964,6 +964,7 @@ def build_mihomo_config(unique_proxies, user_options=None):
             "proxies": [
                 "Auto-Fallback",
                 "🛡️ Mobile-Bypass",
+                "🤖 Auto-AI-Stable",
                 "Auto-UrlTest",
             ] + category_names + fallback_proxies
         },
@@ -986,6 +987,17 @@ def build_mihomo_config(unique_proxies, user_options=None):
             "lazy": False,
             "max-failed-times": 2,
             "proxies": mobile_proxies
+        },
+        {
+            "name": "🤖 Auto-AI-Stable",
+            "type": "fallback",
+            "url": "https://generativelanguage.googleapis.com",
+            "expected-status": "404",
+            "interval": 180,
+            "timeout": 3000,
+            "lazy": False,
+            "max-failed-times": 3,
+            "proxies": ai_proxies
         },
         {
             "name": "Auto-UrlTest",
@@ -1033,6 +1045,12 @@ def build_mihomo_config(unique_proxies, user_options=None):
         "DOMAIN-SUFFIX,gvt1.com,DIRECT",
         "DOMAIN-SUFFIX,gvt2.com,DIRECT",
         "DOMAIN-SUFFIX,push.apple.com,DIRECT",
+
+        # Antigravity Unlocker (confeden) direct bypass
+        "DOMAIN,cloudcode-pa.googleapis.com,DIRECT",
+        "DOMAIN,daily-cloudcode-pa.googleapis.com,DIRECT",
+        "IP-CIDR,45.155.204.190/32,DIRECT,no-resolve",
+        "IP-CIDR,83.220.169.155/32,DIRECT,no-resolve",
     ]
 
     category_rules = []
@@ -1111,6 +1129,8 @@ def build_mihomo_config(unique_proxies, user_options=None):
                 "1.1.1.1"
             ],
             "fake-ip-filter": [
+                "cloudcode-pa.googleapis.com",
+                "daily-cloudcode-pa.googleapis.com",
                 "*.lan", "*.local", "localhost", "time.*", "ntp.*",
                 "+.pool.ntp.org", "stun.*", "*.msftconnecttest.com", "*.msftncsi.com",
                 "connectivitycheck.gstatic.com", "connectivitycheck.android.com",

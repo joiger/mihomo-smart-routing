@@ -294,6 +294,7 @@ class TestAegisCore(unittest.TestCase):
         self.assertEqual(len(config["proxies"]), 3)
         self.assertTrue(any(g["name"] == "Auto-Fallback" for g in config["proxy-groups"]))
         self.assertTrue(any(g["name"] == "🛡️ Mobile-Bypass" for g in config["proxy-groups"]))
+        self.assertTrue(any(g["name"] == "🤖 Auto-AI-Stable" for g in config["proxy-groups"]))
 
         # Check YAML serialization
         with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False, encoding="utf-8") as tf:

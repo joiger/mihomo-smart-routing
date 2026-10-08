@@ -16,7 +16,10 @@ BLOCK_PATTERNS = [
     "blocked by cloudflare",
     "sorry, you have been blocked",
     "location not supported",
-    "service unavailable in your region"
+    "service unavailable in your region",
+    "gemini пока не поддерживается",
+    "не поддерживается в вашей стране",
+    "пока не поддерживается"
 ]
 
 def is_response_blocked(status_code: int, body_text: str = "") -> Tuple[bool, str]:
