@@ -77,6 +77,19 @@ jobs:
               "Content-Type": "application/json"
           }
 
+          # Private rules live in the unlisted Gist, never in this repository.
+          if gist_id:
+              from scripts.merge_private_rules import merge_private_rules
+              existing_req = urllib.request.Request(
+                  f"https://api.github.com/gists/{gist_id}", headers=headers)
+              with urllib.request.urlopen(existing_req, timeout=30) as existing_resp:
+                  existing = json.loads(existing_resp.read().decode())
+              overrides = existing.get("files", {}).get("routing-overrides.yaml")
+              if overrides:
+                  if overrides.get("truncated"):
+                      raise ValueError("Private routing overrides are too large")
+                  content = merge_private_rules(content, overrides["content"])
+
           payload = json.dumps({
               "description": "Aegis — Smart Routing & Multi-Subscription Merger (100% Private)",
               "files": {
