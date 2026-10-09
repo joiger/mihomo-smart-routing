@@ -1,7 +1,14 @@
 import http from 'node:http';
 import net from 'node:net';
 import fs from 'node:fs';
-import { runTriageIfCooldownPassed, applyFix } from './incident_auto_triage.mjs';
+import { runTriageIfCooldownPassed, applyFix, harvestLogs, currentModelEvent, currentRegionBlocked } from './incident_auto_triage.mjs';
+
+process.on('uncaughtException', (err) => {
+  console.error('[Aegis Watcher] Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[Aegis Watcher] Unhandled Rejection:', reason);
+});
 
 const LOG_PATH = 'C:\\Users\\hitsugi ni ochita\\AppData\\Roaming\\Antigravity\\logs\\language_server.log';
 const UNLOCKER_REPORT = 'C:\\Users\\hitsugi ni ochita\\Desktop\\Antigravity Unlocker - отчёт.txt';
@@ -116,6 +123,7 @@ async function parseHealth() {
   let isOffline = false;
   let ping = 100;
   let route = 'Aegis 🤖 Auto-AI-Stable';
+  const liveLogs = harvestLogs();
 
   // 1. Probe Clash mixed-port
   const proxyAlive = await checkProxyAlive();
@@ -137,22 +145,7 @@ async function parseHealth() {
       const lines = chunk.split('\n').filter(l => l.trim().length > 0);
 
       // Walk backwards to find the LAST model event
-      let lastEvent = null;
-      for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i];
-        if (line.includes('streamGenerateContent') && line.includes('ResponseID:')) {
-          lastEvent = 'SUCCESS';
-          break;
-        }
-        if (line.includes('FAILED_PRECONDITION (code 400)') || line.includes('region-400')) {
-          lastEvent = 'BLOCKED_400';
-          break;
-        }
-        if (line.includes('SEND_USER_CASCADE_MESSAGE') && !lastEvent) {
-          lastEvent = 'IN_FLIGHT';
-          break;
-        }
-      }
+      const lastEvent = currentModelEvent(chunk);
 
       if (lastEvent === 'BLOCKED_400') {
         isBlocked = true;
@@ -182,15 +175,14 @@ async function parseHealth() {
         if (m) ping = parseInt(m[1], 10);
       }
 
-      // Check if unlocker report ended with a model success
-      const uLines = rep.split('\n').filter(l => l.trim().length > 0);
-      const lastULines = uLines.slice(-10).join('\n');
-      if (lastULines.includes('модель ответила (x1)')) {
-        // If the very latest event was success, don't trigger blocked
-        isBlocked = false;
-        isOffline = false;
-      }
     } catch (e) {}
+  }
+
+  isBlocked = currentRegionBlocked(liveLogs);
+  if (liveLogs.gate && Math.abs(Date.now() / 1000 - liveLogs.gate.at) < 120) {
+    route = liveLogs.gate.route || route;
+    const activeRoute = liveLogs.gate.routes?.find(item => item.label === route);
+    if (activeRoute?.latency_ms != null) ping = activeRoute.latency_ms;
   }
 
   // Determine State
@@ -214,7 +206,7 @@ async function parseHealth() {
     };
 
     // Autonomous Self-Healing: immediately heal if needed
-    applyFix(latestIncident?.rootCause || 'REGION_400_BLOCKED');
+    if (triageRes) applyFix(latestIncident?.rootCause || 'PROXY_OFFLINE');
   } else if (isBusy) {
     currentStatus = {
       state: 'yellow',
@@ -330,6 +322,23 @@ function updateDOM(ws) {
           return null;
         }
 
+        function triggerClick(element) {
+          if (!element) return;
+          try {
+            element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, view: window }));
+            element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+            element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, view: window }));
+            element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+          } catch (e) {}
+
+          if (typeof element.click === 'function') {
+            try { element.click(); } catch (e) {}
+          }
+          try {
+            element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+          } catch (e) {}
+        }
+
         const checkAndAutoRetry = () => {
           const isAutoActive = localStorage.getItem('ag_auto_retry_active') !== 'false';
           if (!isAutoActive) return;
@@ -375,8 +384,7 @@ function updateDOM(ws) {
 
                 setTimeout(() => {
                   try {
-                    target.element.click();
-                    target.element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                    triggerClick(target.element);
                     console.log(\`[Aegis Auto-Retry] Успешно нажат Retry (\${target.text}) [Попытка \${window._agRetryCount}/\${MAX_RETRIES}]\`);
                   } catch (err) {
                     console.error('[Aegis Auto-Retry] Ошибка нажатия:', err);
@@ -614,9 +622,13 @@ function connectToElectron() {
 
         const ws = new WebSocket(page.webSocketDebuggerUrl);
         ws.onopen = async () => {
-          activeWs = ws;
-          await parseHealth();
-          updateDOM(ws);
+          try {
+            activeWs = ws;
+            await parseHealth();
+            updateDOM(ws);
+          } catch (err) {
+            console.error('[Aegis Watcher] ws.onopen error:', err);
+          }
         };
         ws.onclose = () => {
           activeWs = null;
@@ -636,9 +648,13 @@ function connectToElectron() {
 
 // Background poll loop
 setInterval(async () => {
-  await parseHealth();
-  if (activeWs && activeWs.readyState === WebSocket.OPEN) {
-    updateDOM(activeWs);
+  try {
+    await parseHealth();
+    if (activeWs && activeWs.readyState === WebSocket.OPEN) {
+      updateDOM(activeWs);
+    }
+  } catch (err) {
+    console.error('[Aegis Watcher] Poll loop error:', err);
   }
 }, 2500);
 
