@@ -54,7 +54,7 @@ function main(config) {
   };
   for (const [name, reserveName, key, interval, lazy] of [
     ['Auto-Fallback', 'Aegis-Reserve', 'primary_nodes', 30, false],
-    ['🛡️ Mobile-Bypass', 'Aegis-Mobile-Reserve', 'mobile_nodes', 60, true],
+    ['🛡️ Mobile-Bypass', 'Aegis-Mobile-Reserve', 'mobile_nodes', 30, false],
     ['🤖 Auto-AI-Stable', 'Aegis-AI-Reserve', 'ai_nodes', 60, false],
     ['✈️ Auto-TG-Stable', '✈️ TG-Reserve', 'tg_nodes', 30, false],
     ['💬 Auto-Discord-Stable', '💬 Discord-Reserve', 'discord_nodes', 30, false],

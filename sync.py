@@ -649,7 +649,12 @@ def fetch_all_subscriptions(subs, timeout=15):
 
     return all_proxies
 
+def is_wifi_only(n):
+    return any(k in n for k in ["только wi-fi", "только wifi", "wifi only", "wi-fi only", "(wi-fi)", "(wifi)"])
+
 def is_relay_or_bypass(n):
+    if is_wifi_only(n):
+        return False
     return any(k in n for k in ["→", "->", "обход", "bypass", "relay"])
 
 def is_junk_or_auto(p):
@@ -756,6 +761,8 @@ def fallback_priority(name):
     Tier 6: Other / unknown.
     """
     n = name.lower()
+    if is_wifi_only(n):
+        return 50
     is_relay = is_relay_or_bypass(n)
 
     # Tier 1: Finland & Sweden direct (lowest physical latency ~30–45 ms)
@@ -804,6 +811,43 @@ def fallback_priority(name):
         return 5
 
     return 6
+
+def mobile_priority(name):
+    """
+    Priority sorting for Mobile LTE / Cellular bypass pool:
+    Tier 1: Explicit LTE / Cellular nodes (e.g. '[VPNUS] 🇫🇮 LTE #1', '[LockAway] 🇷🇺 LTE')
+    Tier 2: Proven clean direct bypasses (e.g. '[Artemida] 🇪🇺🏳️ Обход 2.1')
+    Tier 3: Other anti-DPI bypasses & relays
+    Tier 4: Tier 1 direct Nordic nodes (FI, SE)
+    Tier 5: Core EU direct nodes (DE, NL, EE, PL)
+    Tier 6: General fallback
+    Tier 999: Wi-Fi only nodes (never used on mobile LTE)
+    """
+    n = name.lower()
+    if is_wifi_only(n):
+        return 999
+
+    # Tier 1: Explicit LTE nodes
+    if any(k in n for k in ["lte", "мобил", "cellular"]):
+        return 1
+
+    # Tier 2: Reality / proven direct bypasses
+    if any(k in n for k in ["обход 2.1", "обход 2", "обход 1", "обход 3", "обход 4", "обход 5"]):
+        return 2
+
+    # Tier 3: Other relays / bypasses
+    if is_relay_or_bypass(n):
+        return 3
+
+    # Tier 4: Direct Nordic nodes
+    if any(k in n for k in ["🇫🇮", "финлянди", "finland", "🇸🇪", "швеци", "sweden"]):
+        return 4
+
+    # Tier 5: Core EU
+    if any(k in n for k in ["🇩🇪", "германи", "germany", "🇳🇱", "нидерланд", "netherlands"]):
+        return 5
+
+    return 10 + fallback_priority(name)
 
 def ai_priority(name):
     """
@@ -1107,9 +1151,10 @@ def build_mihomo_config(unique_proxies, user_options=None):
     proxy_names = [p["name"] for p in unique_proxies]
     fallback_proxies = sorted(proxy_names, key=fallback_priority)
 
-    # Dedicated list for Mobile LTE / DPI bypass (Relays & Bypasses first)
-    relays_and_bypasses = [p for p in fallback_proxies if is_relay_or_bypass(p.lower())]
-    mobile_proxies = (relays_and_bypasses + [p for p in fallback_proxies if p not in relays_and_bypasses]) if relays_and_bypasses else fallback_proxies
+    # Dedicated list for Mobile LTE / DPI bypass (Strictly penalize/exclude Wi-Fi-only nodes, prioritize LTE & Reality)
+    mobile_proxies = sorted([p for p in proxy_names if not is_wifi_only(p.lower())], key=mobile_priority)
+    if not mobile_proxies:
+        mobile_proxies = fallback_proxies
 
     # Priority sorting for AI Services
     ai_proxies = sorted([p for p in proxy_names if ai_priority(p) < 90], key=ai_priority)
@@ -1159,9 +1204,9 @@ def build_mihomo_config(unique_proxies, user_options=None):
         {
             "name": "Auto-Fallback",
             "type": "fallback",
-            "url": "https://www.gstatic.com/generate_204",
+            "url": "http://cp.cloudflare.com/generate_204",
             "interval": 20,
-            "timeout": 2500,
+            "timeout": 3000,
             "lazy": False,
             "max-failed-times": 2,
             "proxies": fallback_proxies
@@ -1169,9 +1214,9 @@ def build_mihomo_config(unique_proxies, user_options=None):
         {
             "name": "🛡️ Mobile-Bypass",
             "type": "fallback",
-            "url": "https://www.gstatic.com/generate_204",
+            "url": "http://cp.cloudflare.com/generate_204",
             "interval": 20,
-            "timeout": 2500,
+            "timeout": 3000,
             "lazy": False,
             "max-failed-times": 2,
             "proxies": mobile_proxies
@@ -1195,9 +1240,9 @@ def build_mihomo_config(unique_proxies, user_options=None):
         {
             "name": "Auto-UrlTest",
             "type": "url-test",
-            "url": "https://www.gstatic.com/generate_204",
+            "url": "http://cp.cloudflare.com/generate_204",
             "interval": 30,
-            "timeout": 2500,
+            "timeout": 3000,
             "tolerance": 50,
             "lazy": False,
             "proxies": fallback_proxies
@@ -1235,7 +1280,7 @@ def build_mihomo_config(unique_proxies, user_options=None):
             auto_grp = {
                 "name": cat_auto,
                 "type": "fallback",
-                "url": cat.get("health_check_url", "https://www.gstatic.com/generate_204"),
+                "url": cat.get("health_check_url", "http://cp.cloudflare.com/generate_204"),
                 "interval": 30,
                 "timeout": 3000,
                 "lazy": False,
@@ -1250,7 +1295,7 @@ def build_mihomo_config(unique_proxies, user_options=None):
                 res_grp = {
                     "name": cat_reserve,
                     "type": "fallback",
-                    "url": cat.get("health_check_url", "https://www.gstatic.com/generate_204"),
+                    "url": cat.get("health_check_url", "http://cp.cloudflare.com/generate_204"),
                     "interval": 180,
                     "timeout": 3000,
                     "lazy": True,

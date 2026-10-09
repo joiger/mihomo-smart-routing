@@ -44,7 +44,7 @@ def optimize_routing(config, options=None):
     size = options.get('primary_pool_size', 5)
     for name, reserve_name, key, interval, lazy in [
         ('Auto-Fallback', 'Aegis-Reserve', 'primary_nodes', 30, False),
-        ('🛡️ Mobile-Bypass', 'Aegis-Mobile-Reserve', 'mobile_nodes', 60, True),
+        ('🛡️ Mobile-Bypass', 'Aegis-Mobile-Reserve', 'mobile_nodes', 30, False),
         ('🤖 Auto-AI-Stable', 'Aegis-AI-Reserve', 'ai_nodes', 60, False),
         ('✈️ Auto-TG-Stable', '✈️ TG-Reserve', 'tg_nodes', 30, False),
         ('💬 Auto-Discord-Stable', '💬 Discord-Reserve', 'discord_nodes', 30, False),
