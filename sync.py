@@ -653,6 +653,9 @@ def is_relay_or_bypass(n):
     return any(k in n for k in ["→", "->", "обход", "bypass", "relay"])
 
 def is_junk_or_auto(p):
+    from node_filter import is_subscription_placeholder
+    if is_subscription_placeholder(p):
+        return True
     name = p.get("name", "").lower()
     server = str(p.get("server", "")).strip().lower()
     
@@ -827,10 +830,97 @@ def ai_priority(name):
         return 99
     return 10
 
+def telegram_priority(name):
+    n = name.lower()
+    if any(c in n for c in ["🇫🇮", "финляндия", "финлянди", "finland", "helsinki", "хельсинки",
+                            "🇸🇪", "швеция", "швеци", "sweden", "stockholm", "стокгольм",
+                            "🇳🇱", "нидерланды", "нидерланд", "netherlands", "amsterdam", "амстердам"]):
+        return 1
+    if any(c in n for c in ["🇩🇪", "германия", "германи", "germany", "frankfurt", "франкфурт",
+                            "🇵🇱", "польша", "poland", "🇪🇪", "эстония", "estonia"]):
+        return 2
+    if any(c in n for c in ["moscow", "🇷🇺", "россия", "russia"]) and not is_relay_or_bypass(n):
+        return 99
+    return 10
+
+def discord_priority(name):
+    n = name.lower()
+    if any(c in n for c in ["🇸🇪", "швеция", "швеци", "sweden", "stockholm", "стокгольм",
+                            "🇫🇮", "финляндия", "финлянди", "finland", "helsinki", "хельсинки",
+                            "🇩🇪", "германия", "германи", "germany", "frankfurt", "франкфурт"]):
+        return 1
+    if any(c in n for c in ["🇳🇱", "нидерланды", "нидерланд", "netherlands",
+                            "🇵🇱", "польша", "poland", "🇪🇪", "эстония", "estonia"]):
+        return 2
+    if any(c in n for c in ["moscow", "🇷🇺", "россия", "russia"]) and not is_relay_or_bypass(n):
+        return 99
+    return 10
+
+def dev_priority(name):
+    n = name.lower()
+    if is_relay_or_bypass(n):
+        return 1
+    if any(c in n for c in ["🇸🇪", "швеция", "швеци", "sweden", "stockholm", "стокгольм",
+                            "🇫🇮", "финляндия", "финлянди", "finland", "helsinki", "хельсинки",
+                            "🇩🇪", "германия", "германи", "germany", "frankfurt", "франкфурт"]):
+        return 2
+    if any(c in n for c in ["🇳🇱", "нидерланды", "нидерланд", "netherlands",
+                            "🇬🇧", "великобритания", "великобритан", "united kingdom", "uk"]):
+        return 3
+    if any(c in n for c in ["moscow", "🇷🇺", "россия", "russia"]):
+        return 99
+    return 10
+
+def media_priority(name):
+    n = name.lower()
+    if "wi-fi" in n or "wifi" in n or "10гбит" in n or "10g" in n:
+        return 1
+    if any(c in n for c in ["🇩🇪", "германия", "германи", "germany", "frankfurt", "франкфурт",
+                            "🇳🇱", "нидерланды", "нидерланд", "netherlands", "amsterdam", "амстердам"]):
+        return 2
+    if any(c in n for c in ["🇸🇪", "швеция", "швеци", "sweden", "stockholm", "стокгольм",
+                            "🇫🇮", "финляндия", "финлянди", "finland", "helsinki", "хельсинки"]):
+        return 3
+    if any(c in n for c in ["moscow", "🇷🇺", "россия", "russia"]) and not is_relay_or_bypass(n):
+        return 99
+    return 10
+
+def crypto_priority(name):
+    n = name.lower()
+    if any(c in n for c in ["🇨🇭", "швейцария", "швейцари", "switzerland", "zurich", "цюрих",
+                            "🇦🇹", "австрия", "австри", "austria", "vienna", "вена"]):
+        return 1
+    if any(c in n for c in ["🇩🇪", "германия", "германи", "germany", "frankfurt", "франкфурт",
+                            "🇳🇱", "нидерланды", "нидерланд", "netherlands", "amsterdam", "амстердам",
+                            "🇸🇪", "швеция", "швеци", "sweden", "stockholm", "стокгольм",
+                            "🇪🇪", "эстония", "estonia", "🇱🇹", "литва", "lithuania"]):
+        return 2
+    if any(c in n for c in ["🇺🇸", "сша", "usa", "united states", "america"]):
+        return 50
+    if any(c in n for c in ["moscow", "🇷🇺", "россия", "russia"]):
+        return 99
+    return 10
+
+def gaming_priority(name):
+    n = name.lower()
+    if any(c in n for c in ["🇸🇪", "швеция", "швеци", "sweden", "stockholm", "стокгольм",
+                            "🇫🇮", "финляндия", "финлянди", "finland", "helsinki", "хельсинки"]):
+        return 1
+    if any(c in n for c in ["🇵🇱", "польша", "poland", "🇩🇪", "германия", "германи", "germany",
+                            "🇪🇪", "эстония", "estonia"]):
+        return 2
+    if any(c in n for c in ["moscow", "🇷🇺", "россия", "russia"]):
+        return 99
+    return 10
+
 DEFAULT_CATEGORIES = [
     {
         "name": "🎯 Games",
-        "default_options": ["DIRECT", "Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest"],
+        "auto_group": "🎯 Auto-Games-Stable",
+        "reserve_group": "🎯 Games-Reserve",
+        "priority": "gaming",
+        "primary_size": 5,
+        "default_options": ["DIRECT", "🎯 Auto-Games-Stable", "Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest"],
         "rules": [
             "GEOSITE,steam",
             "GEOSITE,epicgames",
@@ -850,7 +940,11 @@ DEFAULT_CATEGORIES = [
     },
     {
         "name": "✈️ Telegram",
-        "default_options": ["Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest", "DIRECT"],
+        "auto_group": "✈️ Auto-TG-Stable",
+        "reserve_group": "✈️ TG-Reserve",
+        "priority": "telegram",
+        "primary_size": 5,
+        "default_options": ["✈️ Auto-TG-Stable", "Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest", "DIRECT"],
         "rules": [
             "GEOSITE,telegram",
             "DOMAIN-SUFFIX,t.me",
@@ -871,7 +965,11 @@ DEFAULT_CATEGORIES = [
     },
     {
         "name": "💬 Discord",
-        "default_options": ["Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest", "DIRECT"],
+        "auto_group": "💬 Auto-Discord-Stable",
+        "reserve_group": "💬 Discord-Reserve",
+        "priority": "discord",
+        "primary_size": 5,
+        "default_options": ["💬 Auto-Discord-Stable", "Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest", "DIRECT"],
         "rules": [
             "GEOSITE,discord",
             "DOMAIN-SUFFIX,discord.com",
@@ -882,21 +980,80 @@ DEFAULT_CATEGORIES = [
         ]
     },
     {
-        "name": "🎬 Media-Streaming",
-        "default_options": ["Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest", "DIRECT"],
+        "name": "💻 Dev-Infrastructure",
+        "auto_group": "💻 Auto-Dev-Stable",
+        "reserve_group": "💻 Dev-Reserve",
+        "priority": "dev",
+        "primary_size": 5,
+        "default_options": ["💻 Auto-Dev-Stable", "Auto-Fallback", "🛡️ Mobile-Bypass", "DIRECT"],
         "rules": [
+            "GEOSITE,github",
+            "GEOSITE,gitlab",
+            "GEOSITE,docker",
+            "DOMAIN-SUFFIX,github.com",
+            "DOMAIN-SUFFIX,githubusercontent.com",
+            "DOMAIN-SUFFIX,github.io",
+            "DOMAIN-SUFFIX,gitlab.com",
+            "DOMAIN-SUFFIX,docker.com",
+            "DOMAIN-SUFFIX,docker.io",
+            "DOMAIN-SUFFIX,huggingface.co",
+            "DOMAIN-SUFFIX,hf.co",
+            "DOMAIN-SUFFIX,npmjs.org",
+            "DOMAIN-SUFFIX,npmjs.com",
+            "DOMAIN-SUFFIX,pypi.org",
+            "DOMAIN-SUFFIX,crates.io",
+        ]
+    },
+    {
+        "name": "🎬 Media-Streaming",
+        "auto_group": "🎬 Auto-Media-Fast",
+        "reserve_group": "🎬 Media-Reserve",
+        "priority": "media",
+        "primary_size": 5,
+        "default_options": ["🎬 Auto-Media-Fast", "Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest", "DIRECT"],
+        "rules": [
+            "GEOSITE,youtube",
             "DOMAIN-SUFFIX,googlevideo.com",
             "DOMAIN-SUFFIX,youtube.com",
             "DOMAIN-SUFFIX,ytimg.com",
             "DOMAIN-SUFFIX,youtu.be",
+            "GEOSITE,twitch",
+            "DOMAIN-SUFFIX,twitch.tv",
+            "GEOSITE,netflix",
+            "DOMAIN-SUFFIX,netflix.com",
+            "GEOSITE,spotify",
+            "DOMAIN-SUFFIX,spotify.com",
             "DOMAIN-SUFFIX,soundcloud.com",
             "DOMAIN-SUFFIX,sndcdn.com",
         ]
     },
     {
+        "name": "🪙 Crypto-Finance",
+        "auto_group": "🪙 Auto-Crypto-Stable",
+        "reserve_group": "🪙 Crypto-Reserve",
+        "priority": "crypto",
+        "primary_size": 5,
+        "default_options": ["🪙 Auto-Crypto-Stable", "Auto-Fallback", "DIRECT"],
+        "rules": [
+            "GEOSITE,binance",
+            "DOMAIN-SUFFIX,binance.com",
+            "DOMAIN-SUFFIX,bnapp.bapi.ninja",
+            "DOMAIN-SUFFIX,bybit.com",
+            "DOMAIN-SUFFIX,okx.com",
+            "DOMAIN-SUFFIX,tradingview.com",
+            "DOMAIN-SUFFIX,coingecko.com",
+            "DOMAIN-SUFFIX,coinmarketcap.com",
+        ]
+    },
+    {
         "name": "🤖 AI-Services",
+        "auto_group": "🤖 Auto-AI-Stable",
+        "reserve_group": "Aegis-AI-Reserve",
         "priority": "ai",
-        "default_options": ["🤖 Auto-AI-Stable", "Auto-Fallback", "🛡️ Mobile-Bypass", "DIRECT"],
+        "primary_size": 5,
+        "health_check_url": "https://generativelanguage.googleapis.com",
+        "expected_status": "404",
+        "default_options": ["🤖 AI-Max-Trust", "🤖 Auto-AI-Stable", "Auto-Fallback", "🛡️ Mobile-Bypass", "REJECT"],
         "rules": [
             "DOMAIN,cloudcode-pa.googleapis.com",
             "DOMAIN,daily-cloudcode-pa.googleapis.com",
@@ -906,15 +1063,34 @@ DEFAULT_CATEGORIES = [
             "DOMAIN-SUFFIX,deepmind.google",
             "DOMAIN-SUFFIX,deepmind.com",
             "DOMAIN-SUFFIX,proactivebackend-pa.googleapis.com",
+            "DOMAIN-SUFFIX,alkalimakersuite-pa.clients6.google.com",
             "DOMAIN-SUFFIX,alkalimakersuite-pa.googleapis.com",
+            "DOMAIN-SUFFIX,jetski-webchannel.googleapis.com",
+            "DOMAIN-SUFFIX,ai.google.dev",
             "DOMAIN-SUFFIX,google.com",
             "DOMAIN-SUFFIX,googleapis.com",
             "DOMAIN-SUFFIX,gstatic.com",
             "DOMAIN-SUFFIX,googleusercontent.com",
             "DOMAIN-SUFFIX,anthropic.com",
             "DOMAIN-SUFFIX,claude.ai",
+            "DOMAIN-SUFFIX,claudeusercontent.com",
             "DOMAIN-SUFFIX,openai.com",
             "DOMAIN-SUFFIX,chatgpt.com",
+            "DOMAIN-SUFFIX,oaistatic.com",
+            "DOMAIN-SUFFIX,oaiusercontent.com",
+            "DOMAIN-SUFFIX,deepseek.com",
+            "DOMAIN-SUFFIX,perplexity.ai",
+            "DOMAIN-SUFFIX,mistral.ai",
+            "DOMAIN-SUFFIX,openrouter.ai",
+            "DOMAIN-SUFFIX,x.ai",
+            "DOMAIN-SUFFIX,grok.com",
+            "DOMAIN-SUFFIX,console.cloud.google.com",
+            "DOMAIN-SUFFIX,cloudresourcemanager.googleapis.com",
+            "DOMAIN-SUFFIX,cloudconsole-pa.clients6.google.com",
+            "DOMAIN-SUFFIX,serviceusage.googleapis.com",
+            "DOMAIN-SUFFIX,developerprofiles-pa.googleapis.com",
+            "DOMAIN-SUFFIX,cloudbilling.googleapis.com",
+            "DOMAIN-SUFFIX,apikeys.googleapis.com",
             "GEOSITE,google-gemini",
             "GEOSITE,google",
             "GEOIP,google",
@@ -939,6 +1115,13 @@ def build_mihomo_config(unique_proxies, user_options=None):
     ai_proxies = sorted([p for p in proxy_names if ai_priority(p) < 90], key=ai_priority)
     if not ai_proxies:
         ai_proxies = fallback_proxies
+
+    # Max-Trust AI pool (Single country: US, strictly filtered to prevent multi-country IP hopping)
+    from routing_policy import is_us_node
+    us_ai_proxies = [p for p in ai_proxies if is_us_node(p)]
+    if not us_ai_proxies:
+        us_ai_proxies = [p for p in proxy_names if is_us_node(p)]
+    ai_max_trust_proxies = us_ai_proxies if us_ai_proxies else ai_proxies
 
     opts = user_options or {}
 
@@ -969,6 +1152,7 @@ def build_mihomo_config(unique_proxies, user_options=None):
                 "Auto-Fallback",
                 "🛡️ Mobile-Bypass",
                 "🤖 Auto-AI-Stable",
+                "🤖 AI-Max-Trust",
                 "Auto-UrlTest",
             ] + category_names + fallback_proxies
         },
@@ -1004,6 +1188,11 @@ def build_mihomo_config(unique_proxies, user_options=None):
             "proxies": ai_proxies
         },
         {
+            "name": "🤖 AI-Max-Trust",
+            "type": "select",
+            "proxies": ai_max_trust_proxies
+        },
+        {
             "name": "Auto-UrlTest",
             "type": "url-test",
             "url": "https://www.gstatic.com/generate_204",
@@ -1015,16 +1204,71 @@ def build_mihomo_config(unique_proxies, user_options=None):
         }
     ]
 
-    # Build category selector groups
+    # Build category auto-fallback and selector groups
     for cat in categories:
         cat_name = cat["name"]
+        cat_auto = cat.get("auto_group")
+        cat_reserve = cat.get("reserve_group", f"{cat_name}-Reserve")
         cat_priority = cat.get("priority", "fallback")
         if cat_priority == "ai":
             cat_proxies = ai_proxies
+        elif cat_priority == "telegram":
+            cat_proxies = sorted(fallback_proxies, key=telegram_priority)
+        elif cat_priority == "discord":
+            cat_proxies = sorted(fallback_proxies, key=discord_priority)
+        elif cat_priority == "dev":
+            cat_proxies = sorted(fallback_proxies, key=dev_priority)
+        elif cat_priority == "media":
+            cat_proxies = sorted(fallback_proxies, key=media_priority)
+        elif cat_priority == "crypto":
+            cat_proxies = sorted(fallback_proxies, key=crypto_priority)
+        elif cat_priority == "gaming":
+            cat_proxies = sorted(fallback_proxies, key=gaming_priority)
         else:
             cat_proxies = fallback_proxies
 
-        default_opts = cat.get("default_options", ["Auto-Fallback", "Auto-UrlTest", "DIRECT"])
+        if cat_auto and not any(g["name"] == cat_auto for g in proxy_groups):
+            primary_size = cat.get("primary_size", 5)
+            main_pool = cat_proxies[:primary_size]
+            reserve_pool = cat_proxies[primary_size:]
+
+            auto_grp = {
+                "name": cat_auto,
+                "type": "fallback",
+                "url": cat.get("health_check_url", "https://www.gstatic.com/generate_204"),
+                "interval": 30,
+                "timeout": 3000,
+                "lazy": False,
+                "max-failed-times": 2,
+                "proxies": main_pool + ([cat_reserve] if reserve_pool else [])
+            }
+            if "expected_status" in cat:
+                auto_grp["expected-status"] = cat["expected_status"]
+            proxy_groups.append(auto_grp)
+
+            if reserve_pool and not any(g["name"] == cat_reserve for g in proxy_groups):
+                res_grp = {
+                    "name": cat_reserve,
+                    "type": "fallback",
+                    "url": cat.get("health_check_url", "https://www.gstatic.com/generate_204"),
+                    "interval": 180,
+                    "timeout": 3000,
+                    "lazy": True,
+                    "max-failed-times": 3,
+                    "hidden": True,
+                    "proxies": reserve_pool
+                }
+                if "expected_status" in cat:
+                    res_grp["expected-status"] = cat["expected_status"]
+                proxy_groups.append(res_grp)
+
+        default_opts = cat.get("default_options", ([cat_auto] if cat_auto else []) + ["Auto-Fallback", "Auto-UrlTest", "DIRECT"])
+        if cat_name == "🤖 AI-Services":
+            default_opts = [("REJECT" if opt == "DIRECT" else opt) for opt in default_opts]
+            default_opts = [opt for opt in default_opts if opt != "DIRECT"]
+            if "REJECT" not in default_opts:
+                default_opts.append("REJECT")
+            cat_proxies = [p for p in cat_proxies if p != "DIRECT"]
         proxy_groups.append({
             "name": cat_name,
             "type": cat.get("type", "select"),
@@ -1049,6 +1293,13 @@ def build_mihomo_config(unique_proxies, user_options=None):
         "DOMAIN-SUFFIX,gvt1.com,DIRECT",
         "DOMAIN-SUFFIX,gvt2.com,DIRECT",
         "DOMAIN-SUFFIX,push.apple.com,DIRECT",
+
+        # System Push & Sync Services Direct
+        "DOMAIN-SUFFIX,wns.windows.com,DIRECT",
+        "DOMAIN-SUFFIX,notify.windows.com,DIRECT",
+        "DOMAIN-SUFFIX,push.services.mozilla.com,DIRECT",
+        "DOMAIN-SUFFIX,sync.services.mozilla.com,DIRECT",
+        "DOMAIN-SUFFIX,bitwarden.com,DIRECT",
 
         # GitHub Gist & Raw Anti-DPI bypass (fixes tls handshake eof in Clash Verge)
         "DOMAIN,gist.githubusercontent.com,🛡️ Mobile-Bypass",
@@ -1111,14 +1362,18 @@ def build_mihomo_config(unique_proxies, user_options=None):
             "auto-detect-interface": True,
             "strict-route": True,
             "endpoint-independent-nat": True,
-            "find-process-mode": "strict",
+            "find-process-mode": opts.get("find_process_mode", "strict"),
             "mtu": 1420
+        },
+        "hosts": {
+            "dns.google": "8.8.8.8"
         },
         "dns": {
             "enable": True,
             "use-hosts": True,
             "enhanced-mode": "fake-ip",
             "fake-ip-range": "198.18.0.1/16",
+            "respect-rules": True,
             "default-nameserver": ["77.88.8.8", "1.1.1.1"],
             "nameserver": [
                 "https://dns.google/dns-query",
@@ -1134,7 +1389,43 @@ def build_mihomo_config(unique_proxies, user_options=None):
                 "+.vk.com": "77.88.8.8",
                 "+.gosuslugi.ru": "77.88.8.8",
                 "+.sberbank.ru": "77.88.8.8",
-                "+.tbank.ru": "77.88.8.8"
+                "+.tbank.ru": "77.88.8.8",
+                "+.openai.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.chatgpt.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.oaistatic.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.oaiusercontent.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.anthropic.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.claude.ai": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.claudeusercontent.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.gemini.google.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.generativelanguage.googleapis.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.aistudio.google.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.ai.google.dev": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.deepmind.google": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.deepmind.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.perplexity.ai": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.mistral.ai": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.deepseek.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.openrouter.ai": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.x.ai": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.grok.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.cloudcode-pa.googleapis.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.daily-cloudcode-pa.googleapis.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.proactivebackend-pa.googleapis.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.alkalimakersuite-pa.clients6.google.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.alkalimakersuite-pa.googleapis.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.jetski-webchannel.googleapis.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.makersuite.google.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.console.cloud.google.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.cloudresourcemanager.googleapis.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.cloudconsole-pa.clients6.google.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.serviceusage.googleapis.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.developerprofiles-pa.googleapis.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.cloudbilling.googleapis.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "+.apikeys.googleapis.com": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "geosite:openai": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "geosite:anthropic": "https://dns.google/dns-query#🤖 AI-Max-Trust",
+                "geosite:google-gemini": "https://dns.google/dns-query#🤖 AI-Max-Trust"
             },
             "proxy-server-nameserver": [
                 "77.88.8.8",
@@ -1149,9 +1440,10 @@ def build_mihomo_config(unique_proxies, user_options=None):
         },
         "proxies": unique_proxies,
         "proxy-groups": proxy_groups,
-        "rules": base_rules + category_rules + direct_ru_rules
+        "rules": [r for r in opts.get("private_rules", []) if isinstance(r, str)] + base_rules + category_rules + direct_ru_rules
     }
-    return final_config
+    from routing_policy import optimize_routing
+    return optimize_routing(final_config, opts.get('routing', {}))
 
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1252,6 +1544,15 @@ def main():
     print(f"[INFO] Total active unique proxies assembled: {len(unique_proxies)}")
 
     opts = user_config.get("options", {})
+    local_options_path = os.path.join(script_dir, 'config.local.json')
+    if os.path.exists(local_options_path):
+        try:
+            with open(local_options_path, encoding='utf-8') as local_file:
+                local_data = json.load(local_file).get('options', {})
+                local_routing = local_data.get('routing', {})
+            opts = {**opts, **local_data, 'routing': {**opts.get('routing', {}), **local_routing}}
+        except (OSError, ValueError, AttributeError, TypeError):
+            print('[!] Local routing options unavailable; retaining configured defaults.')
     final_config = build_mihomo_config(unique_proxies, user_options=opts)
     
     env_out = os.getenv("OUTPUT_FILE", "").strip()

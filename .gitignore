@@ -1,6 +1,7 @@
 # Private user config & subscriptions
 config.json
 config.local.json
+telemetry.db*
 *.cookies.txt
 *cookies*.txt
 *.log
@@ -28,3 +29,12 @@ Thumbs.db
 # Agent workspaces
 .agents/
 .codebase-memory/
+
+# Diagnostics & temporary device dumps
+diagnostics/
+*.png
+*.xml
+*.bat
+*dump*.json
+*connections*.json
+

@@ -5,6 +5,7 @@ import { execSync } from 'node:child_process';
 
 const PATHS = {
   unlockerReport: 'C:\\Users\\hitsugi ni ochita\\Desktop\\Antigravity Unlocker - отчёт.txt',
+  unlockerGate: path.join(process.env.LOCALAPPDATA || '', 'AGUnlocker', 'gate.json'),
   languageServerLog: 'C:\\Users\\hitsugi ni ochita\\AppData\\Roaming\\Antigravity\\logs\\language_server.log',
   clashLog: 'C:\\Users\\hitsugi ni ochita\\AppData\\Roaming\\io.github.clash-verge-rev.clash-verge-rev\\logs\\latest.log',
   clashConfig: 'C:\\Users\\hitsugi ni ochita\\AppData\\Roaming\\io.github.clash-verge-rev.clash-verge-rev\\clash-verge.yaml',
@@ -48,6 +49,8 @@ export function harvestLogs() {
   const unlockerTail = readTailSafe(PATHS.unlockerReport, 32768, 'auto');
   const lsTail = readTailSafe(PATHS.languageServerLog, 32768, 'utf8');
   const clashTail = readTailSafe(PATHS.clashLog, 16384, 'utf8');
+  let gate = null;
+  try { gate = JSON.parse(fs.readFileSync(PATHS.unlockerGate, 'utf8')); } catch {}
 
   // Detect current active proxy/route
   let activeNode = 'Unknown';
@@ -67,8 +70,39 @@ export function harvestLogs() {
     unlockerPing,
     unlockerTail,
     lsTail,
-    clashTail
+    clashTail,
+    gate
   };
+}
+
+// The saved desktop report is a snapshot, not a current health signal.
+export function currentModelEvent(text, now = Date.now()) {
+  const lines = text.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i];
+    let event = null;
+    if (/streamGenerateContent.*ResponseID:|модель ответила/.test(line)) event = 'SUCCESS';
+    else if (/FAILED_PRECONDITION \(code 400\)|User location is not supported|region-400/.test(line)) event = 'BLOCKED_400';
+    else if (line.includes('SEND_USER_CASCADE_MESSAGE')) event = 'IN_FLIGHT';
+    if (!event) continue;
+    const match = line.match(/\b[IWEF](\d{2})(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+    // Without a timestamp, historical text cannot establish a current failure.
+    if (!match) return null;
+    const date = new Date(now);
+    const at = new Date(date.getFullYear(), Number(match[1]) - 1, Number(match[2]), Number(match[3]), Number(match[4]), Number(match[5])).getTime();
+    const age = now - at;
+    return age >= 0 && age < 300000 ? event : null;
+  }
+  return null;
+}
+
+export function currentRegionBlocked(logs, now = Date.now()) {
+  const event = currentModelEvent(logs.lsTail || '', now);
+  if (event) return event === 'BLOCKED_400';
+  const gate = logs.gate;
+  if (!gate || Math.abs(now / 1000 - gate.at) > 120) return false;
+  const failure = gate.last_400?.at || 0;
+  return failure > (gate.last_ok?.at || 0) && now / 1000 - failure < 300;
 }
 
 export function diagnose(logs) {
@@ -79,22 +113,19 @@ export function diagnose(logs) {
   let recommendation = 'Действий не требуется.';
 
   // 1. Check for Google Region 400
-  const lsLines = logs.lsTail.split('\n');
-  const recentLs = lsLines.slice(-40).join('\n');
-  const isRegion400 = recentLs.includes('FAILED_PRECONDITION (code 400)') ||
-                      recentLs.includes('User location is not supported') ||
-                      logs.unlockerTail.includes('region-400') ||
-                      logs.unlockerTail.includes('маршрут «свой прокси» нёс region-400');
+  const isRegion400 = currentRegionBlocked(logs);
 
   // 2. Check for TLS Handshake EOF / DPI
-  const isDpiHandshake = logs.clashTail.includes('tls handshake eof') ||
-                         logs.clashTail.includes('read: connection reset by peer') ||
-                         logs.clashTail.includes('handshake timeout');
+  const isDpiHandshake = logs.clashTail.split('\n').some(line => {
+    if (!/tls handshake eof|read: connection reset by peer|handshake timeout/.test(line)) return false;
+    const stamp = line.match(/^\[([^\]]+)\]/);
+    const age = stamp ? Date.now() - new Date(stamp[1].replace(' ', 'T')).getTime() : Infinity;
+    return age >= 0 && age < 300000;
+  });
 
   // 3. Check for Proxy connection refusal / timeout
-  const isOffline = logs.unlockerTail.includes('свой прокси — недоступен') ||
-                    logs.unlockerTail.includes('отложен на 2 мин') ||
-                    (logs.unlockerPing === null && logs.unlockerTail.includes('ошибка подключения'));
+  const isOffline = logs.gate && Math.abs(Date.now() / 1000 - logs.gate.at) < 120 &&
+                    logs.gate.routes?.length > 0 && logs.gate.routes.every(route => !route.usable);
 
   if (isRegion400) {
     rootCause = 'REGION_400_BLOCKED';

@@ -22,3 +22,9 @@ class PrivateRulesTests(unittest.TestCase):
     def test_missing_policy_aborts(self):
         with self.assertRaises(ValueError):
             merge_private_rules(self.config, 'rules: ["DOMAIN,ha.example.com,MISSING"]')
+
+    def test_build_mihomo_config_includes_private_rules(self):
+        import sync
+        cfg = sync.build_mihomo_config([], user_options={"private_rules": ["DOMAIN,test.example.com,DIRECT"]})
+        self.assertEqual(cfg["rules"][0], "DOMAIN,test.example.com,DIRECT")
+

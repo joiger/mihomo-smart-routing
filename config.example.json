@@ -31,6 +31,14 @@
     }
   ],
   "options": {
+    "routing": {
+      "primary_pool_size": 5,
+      "node_order": [],
+      "primary_nodes": [],
+      "mobile_nodes": [],
+      "ai_nodes": [],
+      "ai_max_trust_nodes": []
+    },
     "mixed_port": 7890,
     "socks_port": 7891,
     "redir_port": 7892,
@@ -84,7 +92,7 @@
       {
         "name": "🤖 AI-Services",
         "priority": "ai",
-        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "default_options": ["🤖 AI-Max-Trust", "🤖 Auto-AI-Stable", "Auto-Fallback", "REJECT"],
         "rules": [
           "DOMAIN-SUFFIX,openai.com",
           "DOMAIN-SUFFIX,chatgpt.com",

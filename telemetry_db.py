@@ -13,6 +13,7 @@ import subprocess
 from typing import List, Dict, Tuple, Optional
 
 DEFAULT_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "telemetry.db")
+GEO_BLOCK_COOLDOWN_SECONDS = 15 * 60
 
 def get_db_connection(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path, timeout=10.0)
@@ -148,7 +149,7 @@ def recalculate_scores(db_path: str = DEFAULT_DB_PATH):
             SELECT network_type, category, proxy_name,
                    AVG(CASE WHEN latency_ms > 0 THEN latency_ms ELSE NULL END) as avg_lat,
                    AVG(packet_loss_rate) as avg_loss,
-                   MAX(is_geo_blocked) as has_block,
+                   0 as has_block,
                    COUNT(*) as total_probes,
                    SUM(CASE WHEN latency_ms > 0 THEN 1 ELSE 0 END) as successful_probes
             FROM node_telemetry
@@ -160,7 +161,16 @@ def recalculate_scores(db_path: str = DEFAULT_DB_PATH):
             net_type, category, proxy_name, avg_lat, avg_loss, has_block, total, successful = row
             avg_lat = avg_lat if avg_lat is not None else 9999.0
             avg_loss = avg_loss if avg_loss is not None else 1.0
-            has_block = int(has_block or 0)
+            # A block is service/network specific and expires. A later successful
+            # observation clears it immediately; transport failures do not clear it.
+            latest = conn.execute("""
+                SELECT timestamp, is_geo_blocked FROM node_telemetry
+                WHERE network_type = ? AND category = ? AND proxy_name = ?
+                  AND (is_geo_blocked = 1 OR (latency_ms > 0 AND is_geo_blocked = 0))
+                ORDER BY timestamp DESC, id DESC LIMIT 1
+            """, (net_type, category, proxy_name)).fetchone()
+            has_block = int(bool(latest and latest[1] and
+                                 now - latest[0] < GEO_BLOCK_COOLDOWN_SECONDS))
             uptime = (successful / total * 100.0) if total > 0 else 0.0
             
             score = calculate_node_score(avg_lat, avg_loss, has_block, uptime)
