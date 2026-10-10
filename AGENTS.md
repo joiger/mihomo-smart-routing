@@ -32,3 +32,13 @@ This project is fully indexed in **Codebase Memory**:
 - **Zero-Downtime Guarantee**: If upstream subscription fetch fails (5xx, timeout, invalid format), Aegis must gracefully fall back to cached proxies without breaking downstream clients.
 - **Secret Hygiene**: NEVER hardcode private subscription tokens, Gist API keys, or personal server passwords into git-tracked files. Use `config.json` / environment variables.
 - **Test Integrity**: Always run `python -m unittest discover tests` and `python test_telemetry.py` before finalizing changes.
+
+---
+
+## 5. Agent Autonomy & Fork-Only Escalation
+- **End-to-End Autonomy (Делай всё сам под ключ)**: Solve tasks autonomously through the complete cycle: diagnosis -> code -> tests -> commit -> push/deploy -> verification (via ADB / Playwright / API). Never pause on routine steps, never ask passive questions ("should I proceed?", "what next?").
+- **Escalate Strictly on Forks (Спрашивать только на развилках)**: User questions (strictly via `ask_question`) are permitted ONLY when encountering:
+  1. **Architectural forks**: 2+ viable engineering paths with differing trade-offs.
+  2. **Product / requirement forks**: Ambiguous user intent or feature preferences that cannot be deduced from context.
+  3. **Destructive / irreversible actions**: DB/volume drops, system reboots, network adapter modifications.
+- At all other times, make sound engineering decisions and execute them immediately.
