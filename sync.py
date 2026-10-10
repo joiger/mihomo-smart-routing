@@ -824,30 +824,44 @@ def mobile_priority(name):
     Tier 999: Wi-Fi only nodes (never used on mobile LTE)
     """
     n = name.lower()
-    if is_wifi_only(n):
+    if is_wifi_only(n) or "lockaway" in n or any(c in n for c in ["🇷🇺", "россия"]):
         return 999
 
-    # Tier 1: Explicit LTE nodes
-    if any(k in n for k in ["lte", "мобил", "cellular"]):
+    # Tier 1: Reality proven bypasses and reliable LTE nodes (interleaved for resilience)
+    if "обход 2.1" in n:
         return 1
-
-    # Tier 2: Reality / proven direct bypasses
-    if any(k in n for k in ["обход 2.1", "обход 2", "обход 1", "обход 3", "обход 4", "обход 5"]):
+    if "lte #1" in n:
         return 2
-
-    # Tier 3: Other relays / bypasses
-    if is_relay_or_bypass(n):
+    if "обход 1" in n:
         return 3
-
-    # Tier 4: Direct Nordic nodes
-    if any(k in n for k in ["🇫🇮", "финлянди", "finland", "🇸🇪", "швеци", "sweden"]):
+    if "lte #2" in n:
         return 4
-
-    # Tier 5: Core EU
-    if any(k in n for k in ["🇩🇪", "германи", "germany", "🇳🇱", "нидерланд", "netherlands"]):
+    if "обход 2" in n:
         return 5
+    if "lte #3" in n:
+        return 6
+    if "обход 3" in n:
+        return 7
+    if "lte #4" in n or "lte reserve" in n:
+        return 8
+    if any(k in n for k in ["обход 4", "обход 5"]):
+        return 9
+    if any(k in n for k in ["lte", "мобил", "cellular"]):
+        return 10
 
-    return 10 + fallback_priority(name)
+    # Tier 2: Other relays / bypasses
+    if is_relay_or_bypass(n):
+        return 12
+
+    # Tier 3: Direct Nordic nodes
+    if any(k in n for k in ["🇫🇮", "финлянди", "finland", "🇸🇪", "швеци", "sweden"]):
+        return 15
+
+    # Tier 4: Core EU
+    if any(k in n for k in ["🇩🇪", "германи", "germany", "🇳🇱", "нидерланд", "netherlands"]):
+        return 16
+
+    return 20 + fallback_priority(name)
 
 def ai_priority(name):
     """
@@ -1213,12 +1227,12 @@ def build_mihomo_config(unique_proxies, user_options=None):
         },
         {
             "name": "🛡️ Mobile-Bypass",
-            "type": "fallback",
+            "type": "url-test",
             "url": "http://cp.cloudflare.com/generate_204",
             "interval": 20,
             "timeout": 3000,
+            "tolerance": 50,
             "lazy": False,
-            "max-failed-times": 2,
             "proxies": mobile_proxies
         },
         {
@@ -1419,12 +1433,12 @@ def build_mihomo_config(unique_proxies, user_options=None):
             "enhanced-mode": "fake-ip",
             "fake-ip-range": "198.18.0.1/16",
             "respect-rules": True,
-            "default-nameserver": ["77.88.8.8", "1.1.1.1"],
+            "default-nameserver": ["77.88.8.8", "77.88.8.1"],
             "nameserver": [
-                "https://dns.google/dns-query",
                 "https://common.dot.dns.yandex.net/dns-query",
                 "77.88.8.8",
-                "1.1.1.1"
+                "77.88.8.1",
+                "https://dns.google/dns-query"
             ],
             "nameserver-policy": {
                 "+.ru": "77.88.8.8",
@@ -1474,13 +1488,14 @@ def build_mihomo_config(unique_proxies, user_options=None):
             },
             "proxy-server-nameserver": [
                 "77.88.8.8",
-                "1.1.1.1"
+                "77.88.8.1"
             ],
             "fake-ip-filter": [
                 "*.lan", "*.local", "localhost", "time.*", "ntp.*",
                 "+.pool.ntp.org", "stun.*", "*.msftconnecttest.com", "*.msftncsi.com",
                 "connectivitycheck.gstatic.com", "connectivitycheck.android.com",
-                "clients3.google.com", "+.clients.google.com", "*.push.apple.com"
+                "clients3.google.com", "+.clients.google.com", "*.push.apple.com",
+                "*.artemida.digital", "*.artemida.live", "*.test-cdn-kkk.com", "*.lizeg.ru"
             ]
         },
         "proxies": unique_proxies,
