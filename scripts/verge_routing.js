@@ -96,7 +96,14 @@ function main(config) {
     const preferredUs = preferredMax.filter(p => isUsNode(p) && usCandidates.includes(p));
     const rankedUs = (OPTIONS.node_order || []).filter(p => isUsNode(p) && usCandidates.includes(p));
     const finalUs = [...new Set([...preferredUs, ...rankedUs, ...usCandidates])];
-    poolProxies = finalUs.length ? finalUs : candidates;
+    if (finalUs.length >= 2) {
+      poolProxies = finalUs;
+    } else if (finalUs.length === 1) {
+      const fallbacks = candidates.filter(p => !finalUs.includes(p));
+      poolProxies = [...finalUs, ...fallbacks];
+    } else {
+      poolProxies = candidates;
+    }
 
     upsert({
       name: '🤖 AI-Max-Trust',
@@ -130,7 +137,7 @@ function main(config) {
     const serviceRules = [];
     for (const [name, url, expected, domains] of [
       ['Aegis-Antigravity', 'https://daily-cloudcode-pa.googleapis.com/', '404', ['cloudcode-pa.googleapis.com', 'daily-cloudcode-pa.googleapis.com']],
-      ['Aegis-Google-AI', 'https://generativelanguage.googleapis.com', '404', ['aistudio.google.com', 'alkalimakersuite-pa.clients6.google.com', 'alkalimakersuite-pa.googleapis.com', 'jetski-webchannel.googleapis.com', 'makersuite.google.com', 'generativelanguage.googleapis.com', 'ai.google.dev', 'console.cloud.google.com', 'cloud.google.com', 'cloudresourcemanager.googleapis.com', 'cloudconsole-pa.clients6.google.com', 'serviceusage.googleapis.com', 'developerprofiles-pa.googleapis.com', 'cloudbilling.googleapis.com', 'apikeys.googleapis.com', 'iam.googleapis.com', 'apis.google.com', 'www.googleapis.com']],
+      ['Aegis-Google-AI', 'https://generativelanguage.googleapis.com', '404', ['gemini.google.com', 'aistudio.google.com', 'alkalimakersuite-pa.clients6.google.com', 'alkalimakersuite-pa.googleapis.com', 'jetski-webchannel.googleapis.com', 'makersuite.google.com', 'generativelanguage.googleapis.com', 'ai.google.dev', 'console.cloud.google.com', 'cloud.google.com', 'cloudresourcemanager.googleapis.com', 'cloudconsole-pa.clients6.google.com', 'serviceusage.googleapis.com', 'developerprofiles-pa.googleapis.com', 'cloudbilling.googleapis.com', 'apikeys.googleapis.com', 'iam.googleapis.com', 'apis.google.com', 'www.googleapis.com']],
       ['Aegis-Claude', 'https://api.anthropic.com/', '404', ['api.anthropic.com']],
       ['Aegis-OpenAI', 'https://api.openai.com/v1/models', '401', ['api.openai.com']]
     ]) {

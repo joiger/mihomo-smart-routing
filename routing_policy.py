@@ -103,7 +103,13 @@ def optimize_routing(config, options=None):
         preferred_us = [p for p in preferred_max if is_us_node(p) and p in us_candidates]
         ranked_us = [p for p in options.get('node_order', []) if is_us_node(p) and p in us_candidates]
         final_us = list(dict.fromkeys(preferred_us + ranked_us + us_candidates))
-        pool_proxies = final_us if final_us else candidates
+        if len(final_us) >= 2:
+            pool_proxies = final_us
+        elif len(final_us) == 1:
+            fallbacks = [p for p in candidates if p not in final_us]
+            pool_proxies = final_us + fallbacks
+        else:
+            pool_proxies = candidates
 
         mt_group = {
             'name': '🤖 AI-Max-Trust',
@@ -140,7 +146,7 @@ def optimize_routing(config, options=None):
             ('Aegis-Antigravity', 'https://daily-cloudcode-pa.googleapis.com/', '404',
              ['cloudcode-pa.googleapis.com', 'daily-cloudcode-pa.googleapis.com']),
             ('Aegis-Google-AI', 'https://generativelanguage.googleapis.com', '404',
-             ['aistudio.google.com', 'alkalimakersuite-pa.clients6.google.com', 'alkalimakersuite-pa.googleapis.com', 'jetski-webchannel.googleapis.com', 'makersuite.google.com', 'generativelanguage.googleapis.com', 'ai.google.dev', 'console.cloud.google.com', 'cloud.google.com', 'cloudresourcemanager.googleapis.com', 'cloudconsole-pa.clients6.google.com', 'serviceusage.googleapis.com', 'developerprofiles-pa.googleapis.com', 'cloudbilling.googleapis.com', 'apikeys.googleapis.com', 'iam.googleapis.com', 'apis.google.com', 'www.googleapis.com']),
+             ['gemini.google.com', 'aistudio.google.com', 'alkalimakersuite-pa.clients6.google.com', 'alkalimakersuite-pa.googleapis.com', 'jetski-webchannel.googleapis.com', 'makersuite.google.com', 'generativelanguage.googleapis.com', 'ai.google.dev', 'console.cloud.google.com', 'cloud.google.com', 'cloudresourcemanager.googleapis.com', 'cloudconsole-pa.clients6.google.com', 'serviceusage.googleapis.com', 'developerprofiles-pa.googleapis.com', 'cloudbilling.googleapis.com', 'apikeys.googleapis.com', 'iam.googleapis.com', 'apis.google.com', 'www.googleapis.com']),
             ('Aegis-Claude', 'https://api.anthropic.com/', '404', ['api.anthropic.com']),
             ('Aegis-OpenAI', 'https://api.openai.com/v1/models', '401', ['api.openai.com']),
         ]

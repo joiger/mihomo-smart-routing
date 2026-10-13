@@ -1180,7 +1180,13 @@ def build_mihomo_config(unique_proxies, user_options=None):
     us_ai_proxies = [p for p in ai_proxies if is_us_node(p)]
     if not us_ai_proxies:
         us_ai_proxies = [p for p in proxy_names if is_us_node(p)]
-    ai_max_trust_proxies = us_ai_proxies if us_ai_proxies else ai_proxies
+    if len(us_ai_proxies) >= 2:
+        ai_max_trust_proxies = us_ai_proxies
+    elif len(us_ai_proxies) == 1:
+        fallbacks = [p for p in ai_proxies if p not in us_ai_proxies]
+        ai_max_trust_proxies = us_ai_proxies + fallbacks
+    else:
+        ai_max_trust_proxies = ai_proxies
 
     opts = user_options or {}
 
@@ -1557,12 +1563,16 @@ def main():
                     "use_cookies": True
                 })
     
-    # 2. If no env variable, load config.json
+    # 2. If no env variable, load config.json (or config.local.json)
     if not subs:
         if not os.path.exists(config_path):
-            print(f"[!] config.json not found in {script_dir}!")
-            print("    Please copy config.example.json to config.json or set SUBSCRIPTIONS env variable.")
-            return 1
+            local_candidate = os.path.join(script_dir, "config.local.json")
+            if os.path.exists(local_candidate):
+                config_path = local_candidate
+            else:
+                print(f"[!] config.json not found in {script_dir}!")
+                print("    Please copy config.example.json to config.json or set SUBSCRIPTIONS env variable.")
+                return 1
             
         with open(config_path, "r", encoding="utf-8") as f:
             user_config = json.load(f)

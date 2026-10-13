@@ -257,4 +257,34 @@ class RoutingPolicyTests(unittest.TestCase):
                                 text=True, encoding='utf-8', capture_output=True, check=True)
         self.assertEqual(json.loads(result.stdout), optimized)
 
+    def test_ai_max_trust_single_us_node_falls_back_to_candidates(self):
+        cfg = {
+            'proxy-groups': [
+                {'name': '🤖 Auto-AI-Stable', 'type': 'fallback',
+                 'proxies': ['[A] 🇺🇸 USA Solo', '[B] 🇩🇪 Germany Node', '[C] 🇫🇮 Finland Node'],
+                 'url': 'https://generativelanguage.googleapis.com'},
+                {'name': '🤖 AI-Services', 'type': 'select',
+                 'proxies': ['🤖 AI-Max-Trust', 'REJECT']}
+            ],
+            'rules': ['MATCH,PROXY']
+        }
+        optimized = optimize_routing(cfg)
+        mt_group = next(g for g in optimized['proxy-groups'] if g['name'] == '🤖 AI-Max-Trust')
+        self.assertGreaterEqual(len(mt_group['proxies']), 2)
+        self.assertEqual(mt_group['proxies'][0], '[A] 🇺🇸 USA Solo')
+        self.assertIn('[B] 🇩🇪 Germany Node', mt_group['proxies'])
+
+        # Aegis-Google-AI fallback group should also have redundant failovers and cover gemini.google.com
+        google_ai = next(g for g in optimized['proxy-groups'] if g['name'] == 'Aegis-Google-AI')
+        self.assertGreaterEqual(len(google_ai['proxies']), 2)
+        rules = optimized.get('rules', [])
+        self.assertIn('DOMAIN-SUFFIX,gemini.google.com,Aegis-Google-AI', rules)
+
+        # Parity with verge script
+        script = Path(__file__).resolve().parents[1] / 'scripts/verge_routing.js'
+        js = "const fs=require('fs'),vm=require('vm');let c={};vm.createContext(c);vm.runInContext(fs.readFileSync(process.argv[1],'utf8'),c);console.log(JSON.stringify(c.main(JSON.parse(fs.readFileSync(0,'utf8')))));"
+        result = subprocess.run(['node', '-e', js, str(script)], input=json.dumps(cfg),
+                                text=True, encoding='utf-8', capture_output=True, check=True)
+        self.assertEqual(json.loads(result.stdout), optimized)
+
 
