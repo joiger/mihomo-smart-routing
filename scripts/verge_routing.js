@@ -105,13 +105,15 @@ function main(config) {
       poolProxies = candidates;
     }
 
+    const mtHidden = groups.find(g => g.name === '🤖 AI-Max-Trust')?.hidden;
     upsert({
       name: '🤖 AI-Max-Trust',
       type: 'select',
-      proxies: poolProxies
+      proxies: poolProxies,
+      ...(mtHidden ? { hidden: true } : {})
     });
 
-    const aiSrv = groups.find(g => g.name === '🤖 AI-Services');
+    const aiSrv = groups.find(g => g.name === '🤖 AI-Services' || g.name === '🤖 Gemini');
     if (aiSrv) {
       if ((aiSrv.proxies || []).includes('🤖 AI-Max-Trust')) {
         aiSrv.proxies = ['🤖 AI-Max-Trust', ...aiSrv.proxies.filter(p => p !== '🤖 AI-Max-Trust')];
@@ -120,7 +122,7 @@ function main(config) {
       }
     }
   }
-  const aiSrv = groups.find(g => g.name === '🤖 AI-Services');
+  const aiSrv = groups.find(g => g.name === '🤖 AI-Services' || g.name === '🤖 Gemini');
   if (aiSrv) {
     let proxies = (aiSrv.proxies || []).map(p => p === 'DIRECT' ? 'REJECT' : p).filter(p => p !== 'DIRECT');
     if (!proxies.includes('REJECT')) {
@@ -156,7 +158,7 @@ function main(config) {
         serviceRules.push(`DOMAIN-SUFFIX,${domain},${name}`);
       }
     }
-    let index = rules.findIndex(r => r.includes('🤖 AI-Services') || r.startsWith('MATCH,'));
+    let index = rules.findIndex(r => r.includes('🤖 AI-Services') || r.includes('🤖 Gemini') || r.startsWith('MATCH,'));
     if (index < 0) index = rules.length;
     rules.splice(index, 0, ...serviceRules.filter(rule => !rules.includes(rule)));
     config.rules = rules;

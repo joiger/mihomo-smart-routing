@@ -530,5 +530,48 @@ class TestAegisCore(unittest.TestCase):
         self.assertTrue(len(violations) > 0)
         self.assertTrue(any("Personal domain leak" in v[2] for v in violations))
 
+    def test_clean_ui_groups_and_individual_pings(self):
+        """
+        Verify that only user-facing services are visible in the UI,
+        technical pools are marked with hidden: True,
+        and each service pings its respective endpoint.
+        """
+        sample_proxies = [
+            {"name": "🇺🇸 USA 1", "type": "vless", "server": "us1.com", "port": 443, "uuid": "u1"},
+            {"name": "🇩🇪 Germany 1", "type": "vless", "server": "de1.com", "port": 443, "uuid": "u2"},
+            {"name": "🇫🇮 Finland 1", "type": "vless", "server": "fi1.com", "port": 443, "uuid": "u3"},
+        ]
+        cfg = sync.build_mihomo_config(sample_proxies)
+        groups = cfg["proxy-groups"]
+        visible_groups = [g["name"] for g in groups if not g.get("hidden", False)]
+
+        # 1. Visible UI cards should be cleanly scoped without duplicate child groups
+        expected_visible = [
+            "PROXY", "🛡️ Mobile-Bypass", "🤖 AI-Services", "🎬 YouTube",
+            "🎵 SoundCloud", "📱 TikTok", "✈️ Telegram", "💻 GitHub",
+            "🏠 Smart Home", "🏦 Banks"
+        ]
+        self.assertEqual(visible_groups, expected_visible)
+
+        # 2. Technical pools must be hidden to prevent UI clutter
+        hidden_groups = [g["name"] for g in groups if g.get("hidden", False)]
+        self.assertIn("Auto-Fallback", hidden_groups)
+        self.assertIn("Auto-UrlTest", hidden_groups)
+        self.assertIn("🤖 Auto-AI-Stable", hidden_groups)
+        self.assertIn("🤖 AI-Max-Trust", hidden_groups)
+
+        # 3. Individual ping endpoints
+        grp_by_name = {g["name"]: g for g in groups}
+        self.assertEqual(grp_by_name["🎬 YouTube"]["url"], "https://www.youtube.com/generate_204")
+        self.assertEqual(grp_by_name["🎵 SoundCloud"]["url"], "https://soundcloud.com")
+        self.assertEqual(grp_by_name["📱 TikTok"]["url"], "https://www.tiktok.com")
+        self.assertEqual(grp_by_name["💻 GitHub"]["url"], "https://github.com")
+        self.assertEqual(grp_by_name["🤖 Auto-AI-Stable"]["url"], "https://generativelanguage.googleapis.com")
+
+        # 4. Defaults
+        self.assertEqual(grp_by_name["🏦 Banks"]["proxies"][0], "DIRECT")
+        self.assertEqual(grp_by_name["🏠 Smart Home"]["proxies"][0], "🛡️ Mobile-Bypass")
+
 if __name__ == "__main__":
     unittest.main()
+

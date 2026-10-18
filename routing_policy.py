@@ -116,13 +116,15 @@ def optimize_routing(config, options=None):
             'type': 'select',
             'proxies': pool_proxies
         }
+        if existing.get('🤖 AI-Max-Trust', {}).get('hidden'):
+            mt_group['hidden'] = True
         if '🤖 AI-Max-Trust' in existing:
             existing['🤖 AI-Max-Trust'].update(mt_group)
         else:
             existing['🤖 AI-Max-Trust'] = mt_group
             groups.append(mt_group)
 
-        ai_srv = existing.get('🤖 AI-Services')
+        ai_srv = existing.get('🤖 AI-Services') or existing.get('🤖 Gemini')
         if ai_srv:
             current_srv_proxies = ai_srv.get('proxies', [])
             if '🤖 AI-Max-Trust' in current_srv_proxies:
@@ -130,7 +132,7 @@ def optimize_routing(config, options=None):
             else:
                 ai_srv['proxies'] = ['🤖 AI-Max-Trust'] + current_srv_proxies
 
-    ai_srv = existing.get('🤖 AI-Services')
+    ai_srv = existing.get('🤖 AI-Services') or existing.get('🤖 Gemini')
     if ai_srv:
         proxies = [('REJECT' if p == 'DIRECT' else p) for p in ai_srv.get('proxies', [])]
         proxies = [p for p in proxies if p != 'DIRECT']
@@ -179,7 +181,7 @@ def optimize_routing(config, options=None):
         rules = config.get('rules', [])
         # Keep local/loopback rules ahead of the new service rules for Unlocker.
         index = next((i for i, rule in enumerate(rules)
-                      if '🤖 AI-Services' in rule or rule.startswith('MATCH,')), len(rules))
+                      if '🤖 AI-Services' in rule or '🤖 Gemini' in rule or rule.startswith('MATCH,')), len(rules))
         rules[index:index] = [rule for rule in service_rules if rule not in rules]
 
     ai_keywords = (

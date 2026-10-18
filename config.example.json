@@ -51,19 +51,66 @@
     ],
     "categories": [
       {
-        "name": "🎯 Games",
-        "default_options": ["DIRECT", "Auto-Fallback", "Auto-UrlTest"],
+        "name": "🤖 AI-Services",
+        "auto_group": "🤖 Auto-AI-Stable",
+        "reserve_group": "Aegis-AI-Reserve",
+        "priority": "ai",
+        "health_check_url": "https://generativelanguage.googleapis.com",
+        "expected_status": "404",
+        "default_options": ["🤖 AI-Max-Trust", "🤖 Auto-AI-Stable", "Auto-Fallback", "🛡️ Mobile-Bypass", "REJECT"],
         "rules": [
-          "GEOSITE,steam",
-          "GEOSITE,epicgames",
-          "GEOSITE,riot",
-          "DOMAIN-SUFFIX,steampowered.com",
-          "DOMAIN-SUFFIX,epicgames.com"
+          "DOMAIN-SUFFIX,openai.com",
+          "DOMAIN-SUFFIX,chatgpt.com",
+          "DOMAIN-SUFFIX,anthropic.com",
+          "DOMAIN-SUFFIX,claude.ai",
+          "DOMAIN-SUFFIX,gemini.google.com",
+          "DOMAIN-SUFFIX,generativelanguage.googleapis.com",
+          "DOMAIN-SUFFIX,aistudio.google.com",
+          "GEOSITE,openai",
+          "GEOSITE,anthropic",
+          "GEOSITE,google-gemini"
+        ]
+      },
+      {
+        "name": "🎬 YouTube",
+        "type": "url-test",
+        "priority": "media",
+        "health_check_url": "https://www.youtube.com/generate_204",
+        "rules": [
+          "GEOSITE,youtube",
+          "DOMAIN-SUFFIX,youtube.com",
+          "DOMAIN-SUFFIX,googlevideo.com",
+          "DOMAIN-SUFFIX,ytimg.com",
+          "DOMAIN-SUFFIX,youtu.be"
+        ]
+      },
+      {
+        "name": "🎵 SoundCloud",
+        "type": "url-test",
+        "priority": "media",
+        "health_check_url": "https://soundcloud.com",
+        "rules": [
+          "DOMAIN-SUFFIX,soundcloud.com",
+          "DOMAIN-SUFFIX,sndcdn.com"
+        ]
+      },
+      {
+        "name": "📱 TikTok",
+        "type": "url-test",
+        "priority": "fallback",
+        "health_check_url": "https://www.tiktok.com",
+        "rules": [
+          "GEOSITE,tiktok",
+          "DOMAIN-SUFFIX,tiktok.com",
+          "DOMAIN-SUFFIX,byteoversea.com",
+          "DOMAIN-SUFFIX,ibytedtos.com"
         ]
       },
       {
         "name": "✈️ Telegram",
-        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "type": "fallback",
+        "priority": "telegram",
+        "health_check_url": "http://cp.cloudflare.com/generate_204",
         "rules": [
           "GEOSITE,telegram",
           "DOMAIN-SUFFIX,t.me",
@@ -72,36 +119,37 @@
         ]
       },
       {
-        "name": "💬 Discord",
-        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "name": "💻 GitHub",
+        "type": "url-test",
+        "priority": "dev",
+        "health_check_url": "https://github.com",
         "rules": [
-          "GEOSITE,discord",
-          "DOMAIN-SUFFIX,discord.com",
-          "DOMAIN-SUFFIX,discord.gg"
+          "GEOSITE,github",
+          "DOMAIN-SUFFIX,github.com",
+          "DOMAIN-SUFFIX,githubusercontent.com",
+          "DOMAIN,gist.githubusercontent.com"
         ]
       },
       {
-        "name": "🎬 Media-Streaming",
-        "default_options": ["Auto-Fallback", "Auto-UrlTest", "DIRECT"],
+        "name": "🏠 Smart Home",
+        "type": "select",
+        "default_options": ["🛡️ Mobile-Bypass", "Auto-Fallback", "DIRECT"],
         "rules": [
-          "DOMAIN-SUFFIX,youtube.com",
-          "DOMAIN-SUFFIX,googlevideo.com",
-          "DOMAIN-SUFFIX,soundcloud.com"
+          "DOMAIN-SUFFIX,ui.nabu.casa",
+          "DOMAIN-SUFFIX,home-assistant.io",
+          "DOMAIN-SUFFIX,mi.com",
+          "DOMAIN-SUFFIX,xiaomi.com"
         ]
       },
       {
-        "name": "🤖 AI-Services",
-        "priority": "ai",
-        "default_options": ["🤖 AI-Max-Trust", "🤖 Auto-AI-Stable", "Auto-Fallback", "REJECT"],
+        "name": "🏦 Banks",
+        "type": "select",
+        "default_options": ["DIRECT", "Auto-Fallback", "🛡️ Mobile-Bypass"],
         "rules": [
-          "DOMAIN-SUFFIX,openai.com",
-          "DOMAIN-SUFFIX,chatgpt.com",
-          "DOMAIN-SUFFIX,anthropic.com",
-          "DOMAIN-SUFFIX,claude.ai",
-          "DOMAIN-SUFFIX,gemini.google.com",
-          "GEOSITE,openai",
-          "GEOSITE,anthropic",
-          "GEOSITE,google-gemini"
+          "DOMAIN-SUFFIX,tbank.ru",
+          "DOMAIN-SUFFIX,tinkoff.ru",
+          "DOMAIN-SUFFIX,ozon.ru",
+          "DOMAIN-SUFFIX,finance.ozon.ru"
         ]
       }
     ]

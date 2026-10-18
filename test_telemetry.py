@@ -178,30 +178,32 @@ class TestAegisTelemetry(unittest.TestCase):
         cfg_custom_proc = build_mihomo_config(sample_proxies, user_options={"find_process_mode": "always"})
         self.assertEqual(cfg_custom_proc["tun"]["find-process-mode"], "always")
 
-        # 6. Verify dedicated service categories and auto-fallback pools
+        # 6. Verify dedicated service categories and auto groups
         group_names = [g["name"] for g in cfg["proxy-groups"]]
         expected_cats = [
-            "🤖 AI-Services", "✈️ Telegram", "💬 Discord",
-            "💻 Dev-Infrastructure", "🎬 Media-Streaming",
-            "🪙 Crypto-Finance", "🎯 Games"
+            "🤖 AI-Services", "🎬 YouTube", "🎵 SoundCloud", "📱 TikTok",
+            "✈️ Telegram", "💻 GitHub", "🏠 Smart Home", "🏦 Banks"
         ]
         for cat in expected_cats:
             self.assertIn(cat, group_names, f"Category group '{cat}' must exist")
 
         expected_auto_groups = [
-            "🤖 Auto-AI-Stable", "✈️ Auto-TG-Stable", "💬 Auto-Discord-Stable",
-            "💻 Auto-Dev-Stable", "🎬 Auto-Media-Fast",
-            "🪙 Auto-Crypto-Stable", "🎯 Auto-Games-Stable"
+            "🤖 Auto-AI-Stable", "🎬 YouTube", "🎵 SoundCloud", "📱 TikTok",
+            "✈️ Telegram", "💻 GitHub"
         ]
         for auto_g in expected_auto_groups:
-            self.assertIn(auto_g, group_names, f"Auto-fallback group '{auto_g}' must exist")
+            self.assertIn(auto_g, group_names, f"Auto group '{auto_g}' must exist")
             grp = next(g for g in cfg["proxy-groups"] if g["name"] == auto_g)
-            self.assertEqual(grp["type"], "fallback")
+            self.assertIn(grp["type"], ("fallback", "url-test"))
             self.assertFalse(grp.get("lazy", False), f"{auto_g} must be active (lazy=False)")
 
-        # Verify Gaming category defaults to DIRECT first
-        gaming_grp = next(g for g in cfg["proxy-groups"] if g["name"] == "🎯 Games")
-        self.assertEqual(gaming_grp["proxies"][0], "DIRECT")
+        # Verify Banks category defaults to DIRECT first
+        banks_grp = next(g for g in cfg["proxy-groups"] if g["name"] == "🏦 Banks")
+        self.assertEqual(banks_grp["proxies"][0], "DIRECT")
+
+        # Verify Smart Home category defaults to Mobile-Bypass first
+        sh_grp = next(g for g in cfg["proxy-groups"] if g["name"] == "🏠 Smart Home")
+        self.assertEqual(sh_grp["proxies"][0], "🛡️ Mobile-Bypass")
 
         # 7. Edge cases: Empty proxies, few proxies (<3), and non-AI-only proxies
         cfg_empty = build_mihomo_config([])
@@ -214,8 +216,8 @@ class TestAegisTelemetry(unittest.TestCase):
             {"name": "Node2", "type": "vless", "server": "n2.com", "port": 443, "uuid": "u2"},
         ]
         cfg_two = build_mihomo_config(two_nodes)
-        dev_two = next(g for g in cfg_two["proxy-groups"] if g["name"] == "💻 Auto-Dev-Stable")
-        self.assertEqual(len(dev_two["proxies"]), 2)
+        github_two = next(g for g in cfg_two["proxy-groups"] if g["name"] == "💻 GitHub")
+        self.assertEqual(len(github_two["proxies"]), 2)
 
         ru_only = [{"name": "🇷🇺 Moscow Relay", "type": "vless", "server": "ru.node.com", "port": 443, "uuid": "u4"}]
         cfg_ru = build_mihomo_config(ru_only)

@@ -973,137 +973,6 @@ def gaming_priority(name):
 
 DEFAULT_CATEGORIES = [
     {
-        "name": "🎯 Games",
-        "auto_group": "🎯 Auto-Games-Stable",
-        "reserve_group": "🎯 Games-Reserve",
-        "priority": "gaming",
-        "primary_size": 5,
-        "default_options": ["DIRECT", "🎯 Auto-Games-Stable", "Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest"],
-        "rules": [
-            "GEOSITE,steam",
-            "GEOSITE,epicgames",
-            "GEOSITE,riot",
-            "GEOSITE,blizzard",
-            "GEOSITE,ea",
-            "DOMAIN-SUFFIX,steampowered.com",
-            "DOMAIN-SUFFIX,steamcommunity.com",
-            "DOMAIN-SUFFIX,steamserver.net",
-            "DOMAIN-SUFFIX,epicgames.com",
-            "DOMAIN-SUFFIX,riotgames.com",
-            "DOMAIN-SUFFIX,leagueoflegends.com",
-            "DOMAIN-SUFFIX,ea.com",
-            "DOMAIN-SUFFIX,battle.net",
-            "DOMAIN-SUFFIX,blizzard.com",
-        ]
-    },
-    {
-        "name": "✈️ Telegram",
-        "auto_group": "✈️ Auto-TG-Stable",
-        "reserve_group": "✈️ TG-Reserve",
-        "priority": "telegram",
-        "primary_size": 5,
-        "default_options": ["✈️ Auto-TG-Stable", "Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest", "DIRECT"],
-        "rules": [
-            "GEOSITE,telegram",
-            "DOMAIN-SUFFIX,t.me",
-            "DOMAIN-SUFFIX,telegram.org",
-            "DOMAIN-SUFFIX,telegram.me",
-            "DOMAIN-SUFFIX,tdesktop.com",
-            "DOMAIN-SUFFIX,telegra.ph",
-            "GEOIP,telegram",
-            "IP-CIDR,91.108.4.0/22,no-resolve",
-            "IP-CIDR,91.108.8.0/22,no-resolve",
-            "IP-CIDR,91.108.12.0/22,no-resolve",
-            "IP-CIDR,91.108.16.0/22,no-resolve",
-            "IP-CIDR,91.108.20.0/22,no-resolve",
-            "IP-CIDR,91.108.56.0/22,no-resolve",
-            "IP-CIDR,149.154.160.0/20,no-resolve",
-            "IP-CIDR,185.76.151.0/24,no-resolve",
-        ]
-    },
-    {
-        "name": "💬 Discord",
-        "auto_group": "💬 Auto-Discord-Stable",
-        "reserve_group": "💬 Discord-Reserve",
-        "priority": "discord",
-        "primary_size": 5,
-        "default_options": ["💬 Auto-Discord-Stable", "Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest", "DIRECT"],
-        "rules": [
-            "GEOSITE,discord",
-            "DOMAIN-SUFFIX,discord.com",
-            "DOMAIN-SUFFIX,discord.gg",
-            "DOMAIN-SUFFIX,discord.media",
-            "DOMAIN-SUFFIX,discordapp.com",
-            "DOMAIN-SUFFIX,discordapp.net",
-        ]
-    },
-    {
-        "name": "💻 Dev-Infrastructure",
-        "auto_group": "💻 Auto-Dev-Stable",
-        "reserve_group": "💻 Dev-Reserve",
-        "priority": "dev",
-        "primary_size": 5,
-        "default_options": ["💻 Auto-Dev-Stable", "Auto-Fallback", "🛡️ Mobile-Bypass", "DIRECT"],
-        "rules": [
-            "GEOSITE,github",
-            "GEOSITE,gitlab",
-            "GEOSITE,docker",
-            "DOMAIN-SUFFIX,github.com",
-            "DOMAIN-SUFFIX,githubusercontent.com",
-            "DOMAIN-SUFFIX,github.io",
-            "DOMAIN-SUFFIX,gitlab.com",
-            "DOMAIN-SUFFIX,docker.com",
-            "DOMAIN-SUFFIX,docker.io",
-            "DOMAIN-SUFFIX,huggingface.co",
-            "DOMAIN-SUFFIX,hf.co",
-            "DOMAIN-SUFFIX,npmjs.org",
-            "DOMAIN-SUFFIX,npmjs.com",
-            "DOMAIN-SUFFIX,pypi.org",
-            "DOMAIN-SUFFIX,crates.io",
-        ]
-    },
-    {
-        "name": "🎬 Media-Streaming",
-        "auto_group": "🎬 Auto-Media-Fast",
-        "reserve_group": "🎬 Media-Reserve",
-        "priority": "media",
-        "primary_size": 5,
-        "default_options": ["🎬 Auto-Media-Fast", "Auto-Fallback", "🛡️ Mobile-Bypass", "Auto-UrlTest", "DIRECT"],
-        "rules": [
-            "GEOSITE,youtube",
-            "DOMAIN-SUFFIX,googlevideo.com",
-            "DOMAIN-SUFFIX,youtube.com",
-            "DOMAIN-SUFFIX,ytimg.com",
-            "DOMAIN-SUFFIX,youtu.be",
-            "GEOSITE,twitch",
-            "DOMAIN-SUFFIX,twitch.tv",
-            "GEOSITE,netflix",
-            "DOMAIN-SUFFIX,netflix.com",
-            "GEOSITE,spotify",
-            "DOMAIN-SUFFIX,spotify.com",
-            "DOMAIN-SUFFIX,soundcloud.com",
-            "DOMAIN-SUFFIX,sndcdn.com",
-        ]
-    },
-    {
-        "name": "🪙 Crypto-Finance",
-        "auto_group": "🪙 Auto-Crypto-Stable",
-        "reserve_group": "🪙 Crypto-Reserve",
-        "priority": "crypto",
-        "primary_size": 5,
-        "default_options": ["🪙 Auto-Crypto-Stable", "Auto-Fallback", "DIRECT"],
-        "rules": [
-            "GEOSITE,binance",
-            "DOMAIN-SUFFIX,binance.com",
-            "DOMAIN-SUFFIX,bnapp.bapi.ninja",
-            "DOMAIN-SUFFIX,bybit.com",
-            "DOMAIN-SUFFIX,okx.com",
-            "DOMAIN-SUFFIX,tradingview.com",
-            "DOMAIN-SUFFIX,coingecko.com",
-            "DOMAIN-SUFFIX,coinmarketcap.com",
-        ]
-    },
-    {
         "name": "🤖 AI-Services",
         "auto_group": "🤖 Auto-AI-Stable",
         "reserve_group": "Aegis-AI-Reserve",
@@ -1125,10 +994,6 @@ DEFAULT_CATEGORIES = [
             "DOMAIN-SUFFIX,alkalimakersuite-pa.googleapis.com",
             "DOMAIN-SUFFIX,jetski-webchannel.googleapis.com",
             "DOMAIN-SUFFIX,ai.google.dev",
-            "DOMAIN-SUFFIX,google.com",
-            "DOMAIN-SUFFIX,googleapis.com",
-            "DOMAIN-SUFFIX,gstatic.com",
-            "DOMAIN-SUFFIX,googleusercontent.com",
             "DOMAIN-SUFFIX,anthropic.com",
             "DOMAIN-SUFFIX,claude.ai",
             "DOMAIN-SUFFIX,claudeusercontent.com",
@@ -1154,6 +1019,128 @@ DEFAULT_CATEGORIES = [
             "GEOIP,google",
             "GEOSITE,openai",
             "GEOSITE,anthropic",
+        ]
+    },
+    {
+        "name": "🎬 YouTube",
+        "type": "url-test",
+        "priority": "media",
+        "health_check_url": "https://www.youtube.com/generate_204",
+        "interval": 30,
+        "timeout": 3000,
+        "tolerance": 50,
+        "rules": [
+            "GEOSITE,youtube",
+            "DOMAIN-SUFFIX,googlevideo.com",
+            "DOMAIN-SUFFIX,youtube.com",
+            "DOMAIN-SUFFIX,ytimg.com",
+            "DOMAIN-SUFFIX,youtu.be",
+            "DOMAIN-SUFFIX,yt.be",
+        ]
+    },
+    {
+        "name": "🎵 SoundCloud",
+        "type": "url-test",
+        "priority": "media",
+        "health_check_url": "https://soundcloud.com",
+        "interval": 60,
+        "timeout": 4000,
+        "tolerance": 50,
+        "rules": [
+            "DOMAIN-SUFFIX,soundcloud.com",
+            "DOMAIN-SUFFIX,sndcdn.com",
+        ]
+    },
+    {
+        "name": "📱 TikTok",
+        "type": "url-test",
+        "priority": "fallback",
+        "health_check_url": "https://www.tiktok.com",
+        "interval": 60,
+        "timeout": 4000,
+        "tolerance": 50,
+        "rules": [
+            "GEOSITE,tiktok",
+            "DOMAIN-SUFFIX,tiktok.com",
+            "DOMAIN-SUFFIX,tiktokcdn.com",
+            "DOMAIN-SUFFIX,tiktokv.com",
+            "DOMAIN-SUFFIX,byteoversea.com",
+            "DOMAIN-SUFFIX,ibytedtos.com",
+            "DOMAIN-SUFFIX,ibyteimg.com",
+            "DOMAIN-SUFFIX,musical.ly",
+        ]
+    },
+    {
+        "name": "✈️ Telegram",
+        "type": "fallback",
+        "priority": "telegram",
+        "health_check_url": "http://cp.cloudflare.com/generate_204",
+        "interval": 30,
+        "timeout": 3000,
+        "rules": [
+            "GEOSITE,telegram",
+            "DOMAIN-SUFFIX,t.me",
+            "DOMAIN-SUFFIX,telegram.org",
+            "DOMAIN-SUFFIX,telegram.me",
+            "DOMAIN-SUFFIX,tdesktop.com",
+            "DOMAIN-SUFFIX,telegra.ph",
+            "GEOIP,telegram",
+            "IP-CIDR,91.108.4.0/22,no-resolve",
+            "IP-CIDR,91.108.8.0/22,no-resolve",
+            "IP-CIDR,91.108.12.0/22,no-resolve",
+            "IP-CIDR,91.108.16.0/22,no-resolve",
+            "IP-CIDR,91.108.20.0/22,no-resolve",
+            "IP-CIDR,91.108.56.0/22,no-resolve",
+            "IP-CIDR,149.154.160.0/20,no-resolve",
+            "IP-CIDR,185.76.151.0/24,no-resolve",
+        ]
+    },
+    {
+        "name": "💻 GitHub",
+        "type": "url-test",
+        "priority": "dev",
+        "health_check_url": "https://github.com",
+        "interval": 30,
+        "timeout": 3000,
+        "tolerance": 50,
+        "rules": [
+            "GEOSITE,github",
+            "DOMAIN-SUFFIX,github.com",
+            "DOMAIN-SUFFIX,githubusercontent.com",
+            "DOMAIN-SUFFIX,github.io",
+            "DOMAIN-SUFFIX,githubassets.com",
+            "DOMAIN,gist.githubusercontent.com",
+        ]
+    },
+    {
+        "name": "🏠 Smart Home",
+        "type": "select",
+        "default_options": ["🛡️ Mobile-Bypass", "Auto-Fallback", "DIRECT"],
+        "rules": [
+            "DOMAIN-SUFFIX,ui.nabu.casa",
+            "DOMAIN-SUFFIX,nabucasa.com",
+            "DOMAIN-SUFFIX,home-assistant.io",
+            "DOMAIN-SUFFIX,mi.com",
+            "DOMAIN-SUFFIX,xiaomi.com",
+            "DOMAIN-SUFFIX,xiaomi.net",
+            "DOMAIN-SUFFIX,io.mi.com",
+            "DOMAIN-SUFFIX,mi-img.com",
+            "DOMAIN-SUFFIX,mhs-service.mi.com",
+        ]
+    },
+    {
+        "name": "🏦 Banks",
+        "type": "select",
+        "default_options": ["DIRECT", "Auto-Fallback", "🛡️ Mobile-Bypass"],
+        "rules": [
+            "DOMAIN-SUFFIX,tbank.ru",
+            "DOMAIN-SUFFIX,tinkoff.ru",
+            "DOMAIN-SUFFIX,ozon.ru",
+            "DOMAIN-SUFFIX,finance.ozon.ru",
+            "DOMAIN-SUFFIX,ozonbank.ru",
+            "DOMAIN-SUFFIX,sberbank.ru",
+            "DOMAIN-SUFFIX,vtb.ru",
+            "DOMAIN-SUFFIX,alfabank.ru",
         ]
     }
 ]
@@ -1229,6 +1216,7 @@ def build_mihomo_config(unique_proxies, user_options=None):
             "timeout": 3000,
             "lazy": False,
             "max-failed-times": 2,
+            "hidden": True,
             "proxies": fallback_proxies
         },
         {
@@ -1250,11 +1238,13 @@ def build_mihomo_config(unique_proxies, user_options=None):
             "timeout": 3000,
             "lazy": False,
             "max-failed-times": 3,
+            "hidden": True,
             "proxies": ai_proxies
         },
         {
             "name": "🤖 AI-Max-Trust",
             "type": "select",
+            "hidden": True,
             "proxies": ai_max_trust_proxies
         },
         {
@@ -1265,6 +1255,7 @@ def build_mihomo_config(unique_proxies, user_options=None):
             "timeout": 3000,
             "tolerance": 50,
             "lazy": False,
+            "hidden": True,
             "proxies": fallback_proxies
         }
     ]
@@ -1272,6 +1263,7 @@ def build_mihomo_config(unique_proxies, user_options=None):
     # Build category auto-fallback and selector groups
     for cat in categories:
         cat_name = cat["name"]
+        cat_type = cat.get("type", "select")
         cat_auto = cat.get("auto_group")
         cat_reserve = cat.get("reserve_group", f"{cat_name}-Reserve")
         cat_priority = cat.get("priority", "fallback")
@@ -1289,56 +1281,97 @@ def build_mihomo_config(unique_proxies, user_options=None):
             cat_proxies = sorted(fallback_proxies, key=crypto_priority)
         elif cat_priority == "gaming":
             cat_proxies = sorted(fallback_proxies, key=gaming_priority)
+        elif cat_priority == "mobile":
+            cat_proxies = mobile_proxies
         else:
             cat_proxies = fallback_proxies
 
-        if cat_auto and not any(g["name"] == cat_auto for g in proxy_groups):
-            primary_size = cat.get("primary_size", 5)
+        if cat_type in ("url-test", "fallback"):
+            # Direct auto-selection group with dedicated ping URL
+            primary_size = cat.get("primary_size", 10)
             main_pool = cat_proxies[:primary_size]
             reserve_pool = cat_proxies[primary_size:]
 
             auto_grp = {
-                "name": cat_auto,
-                "type": "fallback",
+                "name": cat_name,
+                "type": cat_type,
                 "url": cat.get("health_check_url", "http://cp.cloudflare.com/generate_204"),
-                "interval": 30,
-                "timeout": 3000,
+                "interval": cat.get("interval", 30),
+                "timeout": cat.get("timeout", 3000),
                 "lazy": False,
                 "max-failed-times": 2,
-                "proxies": main_pool + ([cat_reserve] if reserve_pool else [])
+                "proxies": main_pool + ([cat_reserve] if reserve_pool and cat.get("has_reserve", False) else [p for p in cat_proxies[primary_size:]])
             }
+            if cat_type == "url-test":
+                auto_grp["tolerance"] = cat.get("tolerance", 50)
             if "expected_status" in cat:
-                auto_grp["expected-status"] = cat["expected_status"]
+                auto_grp["expected-status"] = str(cat["expected_status"])
             proxy_groups.append(auto_grp)
 
-            if reserve_pool and not any(g["name"] == cat_reserve for g in proxy_groups):
+            if reserve_pool and cat.get("has_reserve", False) and not any(g["name"] == cat_reserve for g in proxy_groups):
                 res_grp = {
                     "name": cat_reserve,
-                    "type": "fallback",
-                    "url": cat.get("health_check_url", "http://cp.cloudflare.com/generate_204"),
+                    "type": cat_type,
+                    "url": auto_grp["url"],
                     "interval": 180,
-                    "timeout": 3000,
+                    "timeout": auto_grp["timeout"],
                     "lazy": True,
                     "max-failed-times": 3,
                     "hidden": True,
                     "proxies": reserve_pool
                 }
                 if "expected_status" in cat:
-                    res_grp["expected-status"] = cat["expected_status"]
+                    res_grp["expected-status"] = str(cat["expected_status"])
                 proxy_groups.append(res_grp)
+        else:
+            if cat_auto and not any(g["name"] == cat_auto for g in proxy_groups):
+                primary_size = cat.get("primary_size", 5)
+                main_pool = cat_proxies[:primary_size]
+                reserve_pool = cat_proxies[primary_size:]
 
-        default_opts = cat.get("default_options", ([cat_auto] if cat_auto else []) + ["Auto-Fallback", "Auto-UrlTest", "DIRECT"])
-        if cat_name == "🤖 AI-Services":
-            default_opts = [("REJECT" if opt == "DIRECT" else opt) for opt in default_opts]
-            default_opts = [opt for opt in default_opts if opt != "DIRECT"]
-            if "REJECT" not in default_opts:
-                default_opts.append("REJECT")
-            cat_proxies = [p for p in cat_proxies if p != "DIRECT"]
-        proxy_groups.append({
-            "name": cat_name,
-            "type": cat.get("type", "select"),
-            "proxies": default_opts + cat_proxies
-        })
+                auto_grp = {
+                    "name": cat_auto,
+                    "type": "fallback",
+                    "url": cat.get("health_check_url", "http://cp.cloudflare.com/generate_204"),
+                    "interval": 30,
+                    "timeout": 3000,
+                    "lazy": False,
+                    "max-failed-times": 2,
+                    "hidden": True,
+                    "proxies": main_pool + ([cat_reserve] if reserve_pool else [])
+                }
+                if "expected_status" in cat:
+                    auto_grp["expected-status"] = str(cat["expected_status"])
+                proxy_groups.append(auto_grp)
+
+                if reserve_pool and not any(g["name"] == cat_reserve for g in proxy_groups):
+                    res_grp = {
+                        "name": cat_reserve,
+                        "type": "fallback",
+                        "url": cat.get("health_check_url", "http://cp.cloudflare.com/generate_204"),
+                        "interval": 180,
+                        "timeout": 3000,
+                        "lazy": True,
+                        "max-failed-times": 3,
+                        "hidden": True,
+                        "proxies": reserve_pool
+                    }
+                    if "expected_status" in cat:
+                        res_grp["expected-status"] = str(cat["expected_status"])
+                    proxy_groups.append(res_grp)
+
+            default_opts = cat.get("default_options", ([cat_auto] if cat_auto else []) + ["DIRECT", "Auto-Fallback", "🛡️ Mobile-Bypass"])
+            if cat_name in ("🤖 AI-Services", "🤖 Gemini"):
+                default_opts = [("REJECT" if opt == "DIRECT" else opt) for opt in default_opts]
+                default_opts = [opt for opt in default_opts if opt != "DIRECT"]
+                if "REJECT" not in default_opts:
+                    default_opts.append("REJECT")
+                cat_proxies = [p for p in cat_proxies if p != "DIRECT"]
+            proxy_groups.append({
+                "name": cat_name,
+                "type": cat.get("type", "select"),
+                "proxies": default_opts + [p for p in cat_proxies if p not in default_opts]
+            })
 
     # Assemble rules modularly
     base_rules = [
@@ -1368,8 +1401,6 @@ def build_mihomo_config(unique_proxies, user_options=None):
 
         # GitHub Gist & Raw Anti-DPI bypass (fixes tls handshake eof in Clash Verge)
         "DOMAIN,gist.githubusercontent.com,🛡️ Mobile-Bypass",
-        "DOMAIN-SUFFIX,githubusercontent.com,🛡️ Mobile-Bypass",
-        "DOMAIN-SUFFIX,github.com,🛡️ Mobile-Bypass",
 
         # Microsoft Telemetry drop (prevents proxy traffic waste)
         "DOMAIN-SUFFIX,events.data.microsoft.com,REJECT",
