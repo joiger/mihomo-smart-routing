@@ -136,9 +136,41 @@
         "default_options": ["🛡️ Mobile-Bypass", "Auto-Fallback", "DIRECT"],
         "rules": [
           "DOMAIN-SUFFIX,ui.nabu.casa",
-          "DOMAIN-SUFFIX,home-assistant.io",
+          "DOMAIN-SUFFIX,nabucasa.com",
+          "DOMAIN-SUFFIX,home-assistant.io"
+        ]
+      },
+      {
+        "name": "🧹 Xiaomi Vacuum",
+        "type": "select",
+        "default_options": ["Auto-Fallback", "🛡️ Mobile-Bypass", "DIRECT"],
+        "device_ips": [
+          "192.168.1.150"
+        ],
+        "rules": [
+          "DOMAIN-SUFFIX,io.mi.com",
+          "DOMAIN-SUFFIX,ot.io.mi.com",
+          "DOMAIN-SUFFIX,ott.io.mi.com",
+          "DOMAIN-SUFFIX,api.io.mi.com",
+          "DOMAIN-SUFFIX,spec.idservice.io.mi.com",
           "DOMAIN-SUFFIX,mi.com",
-          "DOMAIN-SUFFIX,xiaomi.com"
+          "DOMAIN-SUFFIX,xiaomi.com",
+          "DOMAIN-SUFFIX,xiaomi.net",
+          "DOMAIN-SUFFIX,mi-img.com",
+          "DOMAIN-SUFFIX,mhs-service.mi.com",
+          "DOMAIN-SUFFIX,mi-idc.com",
+          "DOMAIN-SUFFIX,sec.mi.com",
+          "DOMAIN-SUFFIX,gslb.mi-idc.com",
+          "DOMAIN-SUFFIX,dreame.tech",
+          "DOMAIN-SUFFIX,dreame.com",
+          "DOMAIN-SUFFIX,roborock.com",
+          "DOMAIN-SUFFIX,roidmi.com",
+          "DOMAIN-SUFFIX,viomi.com.cn",
+          "DOMAIN-SUFFIX,viomi.com",
+          "DOMAIN-SUFFIX,mijia.tech",
+          "DOMAIN-KEYWORD,xiaomi",
+          "DOMAIN-KEYWORD,miio",
+          "GEOSITE,xiaomi"
         ]
       },
       {

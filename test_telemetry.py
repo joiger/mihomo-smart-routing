@@ -182,7 +182,7 @@ class TestAegisTelemetry(unittest.TestCase):
         group_names = [g["name"] for g in cfg["proxy-groups"]]
         expected_cats = [
             "🤖 AI-Services", "🎬 YouTube", "🎵 SoundCloud", "📱 TikTok",
-            "✈️ Telegram", "💻 GitHub", "🏠 Smart Home", "🏦 Banks"
+            "✈️ Telegram", "💻 GitHub", "🏠 Smart Home", "🧹 Xiaomi Vacuum", "🏦 Banks"
         ]
         for cat in expected_cats:
             self.assertIn(cat, group_names, f"Category group '{cat}' must exist")
@@ -204,6 +204,11 @@ class TestAegisTelemetry(unittest.TestCase):
         # Verify Smart Home category defaults to Mobile-Bypass first
         sh_grp = next(g for g in cfg["proxy-groups"] if g["name"] == "🏠 Smart Home")
         self.assertEqual(sh_grp["proxies"][0], "🛡️ Mobile-Bypass")
+
+        # Verify Xiaomi Vacuum category defaults to Auto-Fallback (VPN) first
+        vac_grp = next(g for g in cfg["proxy-groups"] if g["name"] == "🧹 Xiaomi Vacuum")
+        self.assertEqual(vac_grp["proxies"][0], "Auto-Fallback")
+        self.assertIn("🛡️ Mobile-Bypass", vac_grp["proxies"])
 
         # 7. Edge cases: Empty proxies, few proxies (<3), and non-AI-only proxies
         cfg_empty = build_mihomo_config([])

@@ -549,7 +549,7 @@ class TestAegisCore(unittest.TestCase):
         expected_visible = [
             "PROXY", "🛡️ Mobile-Bypass", "🤖 AI-Services", "🎬 YouTube",
             "🎵 SoundCloud", "📱 TikTok", "✈️ Telegram", "💻 GitHub",
-            "🏠 Smart Home", "🏦 Banks"
+            "🏠 Smart Home", "🧹 Xiaomi Vacuum", "🏦 Banks"
         ]
         self.assertEqual(visible_groups, expected_visible)
 
@@ -571,6 +571,33 @@ class TestAegisCore(unittest.TestCase):
         # 4. Defaults
         self.assertEqual(grp_by_name["🏦 Banks"]["proxies"][0], "DIRECT")
         self.assertEqual(grp_by_name["🏠 Smart Home"]["proxies"][0], "🛡️ Mobile-Bypass")
+        self.assertEqual(grp_by_name["🧹 Xiaomi Vacuum"]["proxies"][0], "Auto-Fallback")
+
+    def test_xiaomi_vacuum_vpn_routing(self):
+        sample_proxies = [
+            {"name": "🇺🇸 USA 1", "type": "vless", "server": "us1.com", "port": 443, "uuid": "u1"},
+            {"name": "🇩🇪 Germany 1", "type": "vless", "server": "de1.com", "port": 443, "uuid": "u2"},
+        ]
+        user_opts = {
+            "vacuum_ip": "192.168.1.188"
+        }
+        cfg = sync.build_mihomo_config(sample_proxies, user_options=user_opts)
+
+        # Verify group exists and is select type
+        vac_grp = next(g for g in cfg["proxy-groups"] if g["name"] == "🧹 Xiaomi Vacuum")
+        self.assertEqual(vac_grp["type"], "select")
+        # Auto-Fallback must be default to guarantee VPN routing
+        self.assertEqual(vac_grp["proxies"][0], "Auto-Fallback")
+        self.assertIn("🛡️ Mobile-Bypass", vac_grp["proxies"])
+
+        # Verify rules include vacuum IP and Xiaomi IoT cloud domains
+        rules = cfg["rules"]
+        self.assertIn("SRC-IP-CIDR,192.168.1.188/32,🧹 Xiaomi Vacuum", rules)
+        self.assertIn("DOMAIN-SUFFIX,io.mi.com,🧹 Xiaomi Vacuum", rules)
+        self.assertIn("DOMAIN-SUFFIX,ot.io.mi.com,🧹 Xiaomi Vacuum", rules)
+        self.assertIn("DOMAIN-SUFFIX,dreame.tech,🧹 Xiaomi Vacuum", rules)
+        self.assertIn("DOMAIN-SUFFIX,roborock.com,🧹 Xiaomi Vacuum", rules)
+        self.assertIn("GEOSITE,xiaomi,🧹 Xiaomi Vacuum", rules)
 
 if __name__ == "__main__":
     unittest.main()

@@ -1120,12 +1120,37 @@ DEFAULT_CATEGORIES = [
             "DOMAIN-SUFFIX,ui.nabu.casa",
             "DOMAIN-SUFFIX,nabucasa.com",
             "DOMAIN-SUFFIX,home-assistant.io",
+            "DOMAIN-SUFFIX,home-assistant.com",
+        ]
+    },
+    {
+        "name": "🧹 Xiaomi Vacuum",
+        "type": "select",
+        "default_options": ["Auto-Fallback", "🛡️ Mobile-Bypass", "DIRECT"],
+        "rules": [
+            "DOMAIN-SUFFIX,io.mi.com",
+            "DOMAIN-SUFFIX,ot.io.mi.com",
+            "DOMAIN-SUFFIX,ott.io.mi.com",
+            "DOMAIN-SUFFIX,api.io.mi.com",
+            "DOMAIN-SUFFIX,spec.idservice.io.mi.com",
             "DOMAIN-SUFFIX,mi.com",
             "DOMAIN-SUFFIX,xiaomi.com",
             "DOMAIN-SUFFIX,xiaomi.net",
-            "DOMAIN-SUFFIX,io.mi.com",
             "DOMAIN-SUFFIX,mi-img.com",
             "DOMAIN-SUFFIX,mhs-service.mi.com",
+            "DOMAIN-SUFFIX,mi-idc.com",
+            "DOMAIN-SUFFIX,sec.mi.com",
+            "DOMAIN-SUFFIX,gslb.mi-idc.com",
+            "DOMAIN-SUFFIX,dreame.tech",
+            "DOMAIN-SUFFIX,dreame.com",
+            "DOMAIN-SUFFIX,roborock.com",
+            "DOMAIN-SUFFIX,roidmi.com",
+            "DOMAIN-SUFFIX,viomi.com.cn",
+            "DOMAIN-SUFFIX,viomi.com",
+            "DOMAIN-SUFFIX,mijia.tech",
+            "DOMAIN-KEYWORD,xiaomi",
+            "DOMAIN-KEYWORD,miio",
+            "GEOSITE,xiaomi",
         ]
     },
     {
@@ -1412,8 +1437,16 @@ def build_mihomo_config(unique_proxies, user_options=None):
     ]
 
     category_rules = []
+    vacuum_ip = opts.get("vacuum_ip") or opts.get("xiaomi_vacuum_ip")
+    if vacuum_ip:
+        cidr = vacuum_ip if "/" in vacuum_ip else f"{vacuum_ip}/32"
+        category_rules.append(f"SRC-IP-CIDR,{cidr},🧹 Xiaomi Vacuum")
+
     for cat in categories:
         cat_name = cat["name"]
+        for ip in cat.get("device_ips", []):
+            cidr = ip if "/" in ip else f"{ip}/32"
+            category_rules.append(f"SRC-IP-CIDR,{cidr},{cat_name}")
         for r in cat.get("rules", []):
             parts = [p.strip() for p in r.split(",")]
             if len(parts) == 2:
