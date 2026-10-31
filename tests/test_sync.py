@@ -590,11 +590,15 @@ class TestAegisCore(unittest.TestCase):
         self.assertEqual(vac_grp["proxies"][0], "Auto-Fallback")
         self.assertIn("🛡️ Mobile-Bypass", vac_grp["proxies"])
 
-        # Verify rules include vacuum IP and Xiaomi IoT cloud domains
+        # Verify rules include vacuum IP, process-name, MIUI and Xiaomi IoT cloud domains
         rules = cfg["rules"]
         self.assertIn("SRC-IP-CIDR,192.168.1.188/32,🧹 Xiaomi Vacuum", rules)
+        self.assertIn("PROCESS-NAME,com.xiaomi.smarthome,🧹 Xiaomi Vacuum", rules)
+        self.assertIn("DOMAIN-SUFFIX,miui.com,🧹 Xiaomi Vacuum", rules)
+        self.assertIn("DOMAIN-SUFFIX,mi-img.com,🧹 Xiaomi Vacuum", rules)
         self.assertIn("DOMAIN-SUFFIX,io.mi.com,🧹 Xiaomi Vacuum", rules)
         self.assertIn("DOMAIN-SUFFIX,ot.io.mi.com,🧹 Xiaomi Vacuum", rules)
+        self.assertIn("DOMAIN-SUFFIX,sec.mi.com,🧹 Xiaomi Vacuum", rules)
         self.assertIn("DOMAIN-SUFFIX,dreame.tech,🧹 Xiaomi Vacuum", rules)
         self.assertIn("DOMAIN-SUFFIX,roborock.com,🧹 Xiaomi Vacuum", rules)
         self.assertIn("GEOSITE,xiaomi,🧹 Xiaomi Vacuum", rules)
